@@ -1,5 +1,5 @@
-This is Python version 3.13.0 alpha 0
-=====================================
+This is Python version 4.0.0(!)
+===============================
 
 .. image:: https://github.com/python/cpython/workflows/Tests/badge.svg
    :alt: CPython build status on GitHub Actions
@@ -132,9 +132,8 @@ libraries for additional performance gains.
 What's New
 ----------
 
-We have a comprehensive overview of the changes in the `What's New in Python
-3.13 <https://docs.python.org/3.13/whatsnew/3.13.html>`_ document.  For a more
-detailed change log, read `Misc/NEWS
+We do not have a comprehensive overview of the changes for Python 4.0. 
+For a more detailed change log, read `Misc/NEWS
 <https://github.com/python/cpython/tree/main/Misc/NEWS.d>`_, but a full
 accounting of changes can only be gleaned from the `commit history
 <https://github.com/python/cpython/commits/main>`_.
@@ -147,7 +146,7 @@ Documentation
 -------------
 
 `Documentation for Python 3.13 <https://docs.python.org/3.13/>`_ is online,
-updated daily.
+updated daily. Documentation for Python 4.0 is not.
 
 It can also be downloaded in many formats for faster access.  The documentation
 is downloadable in HTML, PDF, and reStructuredText formats; the latter version
@@ -165,6 +164,12 @@ Significant backward incompatible changes were made for the release of Python
 3.0, which may cause programs written for Python 2 to fail when run with Python
 3.  For more information about porting your code from Python 2 to Python 3, see
 the `Porting HOWTO <https://docs.python.org/3/howto/pyporting.html>`_.
+
+
+Converting From Python 3.x to 4.x
+---------------------------------
+
+I have no idea. You figure it out.
 
 
 Testing
@@ -206,15 +211,15 @@ intend to install multiple versions using the same prefix you must decide which
 version (if any) is your "primary" version.  Install that version using ``make
 install``.  Install all other versions using ``make altinstall``.
 
-For example, if you want to install Python 2.7, 3.6, and 3.13 with 3.13 being the
-primary version, you would execute ``make install`` in your 3.13 build directory
+For example, if you want to install Python 2.7, 3.6, and 4.0 with 4.0 being the
+primary version, you would execute ``make install`` in your 4.0 build directory
 and ``make altinstall`` in the others.
 
 
 Release Schedule
 ----------------
 
-See :pep:`719` for Python 3.13 release details.
+See :pep:`401` for Python 4.0 release details.
 
 
 Copyright and License Information

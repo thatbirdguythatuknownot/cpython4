@@ -5,6 +5,24 @@
 #include "string_parser.h"
 #include "pycore_runtime.h"         // _PyRuntime
 
+int _PyPegen_check_restricted(Parser *p, int type)
+{
+    for (int i = 0; i < *p->restrici; i++) {
+        if (p->restricted[i] == type) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int _PyPegen_add_restricted(Parser *p, Token *t)
+{
+    if (!_PyPegen_check_restricted(p, t->type)) {
+        p->restricted[(*p->restrici)++] = t->type;
+    }
+    return 1;
+}
+
 void *
 _PyPegen_dummy_name(Parser *p, ...)
 {

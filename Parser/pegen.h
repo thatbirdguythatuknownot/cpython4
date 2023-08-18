@@ -78,6 +78,10 @@ typedef struct {
     int level;
     int subn;
     int call_invalid_rules;
+    int edalloc;
+    int *restricted;
+    int ialloc;
+    int *restrici;
     int debug;
 } Parser;
 
@@ -331,6 +335,8 @@ expr_ty _PyPegen_ensure_real(Parser *p, expr_ty);
 asdl_seq *_PyPegen_join_sequences(Parser *, asdl_seq *, asdl_seq *);
 int _PyPegen_check_barry_as_flufl(Parser *, Token *);
 int _PyPegen_check_legacy_stmt(Parser *p, expr_ty t);
+int _PyPegen_add_restricted(Parser *p, Token *t);
+int _PyPegen_check_restricted(Parser *p, int type);
 ResultTokenWithMetadata *_PyPegen_check_fstring_conversion(Parser *p, Token *, expr_ty t);
 ResultTokenWithMetadata *_PyPegen_setup_full_format_spec(Parser *, Token *, asdl_expr_seq *, int, int,
                                                          int, int, PyArena *);
@@ -341,10 +347,11 @@ void *_PyPegen_nonparen_genexp_in_call(Parser *p, expr_ty args, asdl_comprehensi
 
 // Parser API
 
-Parser *_PyPegen_Parser_New(struct tok_state *, int, int, int, int *, PyArena *);
+Parser *_PyPegen_Parser_New(struct tok_state *, int, int, int *, int *, int, int *, PyArena *);
 void _PyPegen_Parser_Free(Parser *);
 mod_ty _PyPegen_run_parser_from_file_pointer(FILE *, int, PyObject *, const char *,
-                                    const char *, const char *, PyCompilerFlags *, int *, PyArena *);
+                                    const char *, const char *, PyCompilerFlags *, int *, int *,
+                                    int *, PyArena *);
 void *_PyPegen_run_parser(Parser *);
 mod_ty _PyPegen_run_parser_from_string(const char *, int, PyObject *, PyCompilerFlags *, PyArena *);
 asdl_stmt_seq *_PyPegen_interactive_exit(Parser *);

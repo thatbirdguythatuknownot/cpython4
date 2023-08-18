@@ -18,11 +18,12 @@ _PyParser_ASTFromString(const char *str, PyObject* filename, int mode,
 mod_ty
 _PyParser_ASTFromFile(FILE *fp, PyObject *filename_ob, const char *enc,
                       int mode, const char *ps1, const char* ps2,
-                      PyCompilerFlags *flags, int *errcode, PyArena *arena)
+                      PyCompilerFlags *flags, int *restricted, int *restrici,
+                      int *errcode, PyArena *arena)
 {
     if (PySys_Audit("compile", "OO", Py_None, filename_ob) < 0) {
         return NULL;
     }
     return _PyPegen_run_parser_from_file_pointer(fp, mode, filename_ob, enc, ps1, ps2,
-                                        flags, errcode, arena);
+                                        flags, restricted, restrici, errcode, arena);
 }

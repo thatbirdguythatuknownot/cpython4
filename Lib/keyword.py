@@ -40,7 +40,6 @@ kwlist = [
     'import',
     'in',
     'is',
-    'label',
     'lambda',
     'nonlocal',
     'not',
@@ -58,6 +57,7 @@ softkwlist = [
     '_',
     'case',
     'def',
+    'label',
     'match',
     'type'
 ]

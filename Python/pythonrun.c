@@ -47,7 +47,8 @@ static PyObject *run_mod(mod_ty, PyObject *, PyObject *, PyObject *,
                           PyCompilerFlags *, PyArena *);
 static PyObject *run_pyc_file(FILE *, PyObject *, PyObject *,
                               PyCompilerFlags *);
-static int PyRun_InteractiveOneObjectEx(FILE *, PyObject *, PyCompilerFlags *);
+static int PyRun_InteractiveOneObjectEx(FILE *, PyObject *, PyCompilerFlags *,
+                                        int *, int *);
 static PyObject* pyrun_file(FILE *fp, PyObject *filename, int start,
                             PyObject *globals, PyObject *locals, int closeit,
                             PyCompilerFlags *flags);
@@ -127,6 +128,12 @@ _PyRun_InteractiveLoopObject(FILE *fp, PyObject *filename, PyCompilerFlags *flag
         Py_XDECREF(v);
     }
 
+    int *restricted = PyMem_Calloc(35, sizeof(int));
+    if (restricted == NULL) {
+        return -1;
+    }
+    int restrici = 0;
+
 #ifdef Py_REF_DEBUG
     int show_ref_count = _Py_GetConfig()->show_ref_count;
 #endif
@@ -134,7 +141,7 @@ _PyRun_InteractiveLoopObject(FILE *fp, PyObject *filename, PyCompilerFlags *flag
     int ret;
     int nomem_count = 0;
     do {
-        ret = PyRun_InteractiveOneObjectEx(fp, filename, flags);
+        ret = PyRun_InteractiveOneObjectEx(fp, filename, flags, restricted, &restrici);
         if (ret == -1 && PyErr_Occurred()) {
             /* Prevent an endless loop after multiple consecutive MemoryErrors
              * while still allowing an interactive command to fail with a
@@ -182,7 +189,8 @@ PyRun_InteractiveLoopFlags(FILE *fp, const char *filename, PyCompilerFlags *flag
 // Call _PyParser_ASTFromFile() with sys.stdin.encoding, sys.ps1 and sys.ps2
 static int
 pyrun_one_parse_ast(FILE *fp, PyObject *filename,
-                    PyCompilerFlags *flags, PyArena *arena, mod_ty *pmod)
+                    PyCompilerFlags *flags, int *restricted, int *restrici,
+                    PyArena *arena, mod_ty *pmod)
 {
     PyThreadState *tstate = _PyThreadState_GET();
 
@@ -242,7 +250,8 @@ pyrun_one_parse_ast(FILE *fp, PyObject *filename,
     int errcode = 0;
     *pmod = _PyParser_ASTFromFile(fp, filename, encoding,
                                   Py_single_input, ps1, ps2,
-                                  flags, &errcode, arena);
+                                  flags, restricted, restrici,
+                                  &errcode, arena);
     Py_XDECREF(ps1_obj);
     Py_XDECREF(ps2_obj);
     Py_XDECREF(encoding_obj);
@@ -262,7 +271,8 @@ pyrun_one_parse_ast(FILE *fp, PyObject *filename,
  * error on failure. */
 static int
 PyRun_InteractiveOneObjectEx(FILE *fp, PyObject *filename,
-                             PyCompilerFlags *flags)
+                             PyCompilerFlags *flags, int *restricted,
+                             int *restrici)
 {
     PyArena *arena = _PyArena_New();
     if (arena == NULL) {
@@ -270,7 +280,7 @@ PyRun_InteractiveOneObjectEx(FILE *fp, PyObject *filename,
     }
 
     mod_ty mod;
-    int parse_res = pyrun_one_parse_ast(fp, filename, flags, arena, &mod);
+    int parse_res = pyrun_one_parse_ast(fp, filename, flags, restricted, restrici, arena, &mod);
     if (parse_res != 0) {
         _PyArena_Free(arena);
         return parse_res;
@@ -300,7 +310,7 @@ PyRun_InteractiveOneObject(FILE *fp, PyObject *filename, PyCompilerFlags *flags)
 {
     int res;
 
-    res = PyRun_InteractiveOneObjectEx(fp, filename, flags);
+    res = PyRun_InteractiveOneObjectEx(fp, filename, flags, NULL, NULL);
     if (res == -1) {
         PyErr_Print();
         flush_io();
@@ -1634,7 +1644,7 @@ pyrun_file(FILE *fp, PyObject *filename, int start, PyObject *globals,
 
     mod_ty mod;
     mod = _PyParser_ASTFromFile(fp, filename, NULL, start, NULL, NULL,
-                                flags, NULL, arena);
+                                flags, NULL, NULL, NULL, arena);
 
     if (closeit) {
         fclose(fp);

@@ -113,12 +113,13 @@ simple_stmts[asdl_stmt_seq*]:
 simple_stmt[stmt_ty] (memo):
     | assignment
     | &"type" type_alias
+    | &"label" label_stmt
     | e=star_expressions { _PyAST_Expr(e, EXTRA) }
-    | &'return' return_stmt
+    | &'return' ('return' del_kw_stmt { _PyAST_Return(NULL, EXTRA) } | return_stmt)
     | &('import' | 'from') import_stmt
     | &'raise' raise_stmt
     | 'pass' { _PyAST_Pass(EXTRA) }
-    | &'del' del_stmt
+    | &'del' (del_kw_stmt | del_stmt)
     | &'yield' yield_stmt
     | &'assert' assert_stmt
     | 'break' { _PyAST_Break(EXTRA) }
@@ -126,7 +127,6 @@ simple_stmt[stmt_ty] (memo):
     | &'global' global_stmt
     | &'nonlocal' nonlocal_stmt
     | &'goto' goto_stmt
-    | &'label' label_stmt
 
 compound_stmt[stmt_ty]:
     | &("def" | '@' | 'async') function_def
@@ -189,6 +189,10 @@ global_stmt[stmt_ty]: 'global' a[asdl_expr_seq*]=','.NAME+ {
 nonlocal_stmt[stmt_ty]: 'nonlocal' a[asdl_expr_seq*]=','.NAME+ {
     _PyAST_Nonlocal(CHECK(asdl_identifier_seq*, _PyPegen_map_names_to_ids(p, a)), EXTRA) }
 
+del_kw_stmt[stmt_ty]:
+    | 'del' a[Token*]=('False'|'None'|'True'|'and'|'as'|'assert'|'async'|'await'|'break'|'class'|'continue'|'del'|'elif'|'else'|'except'|'finally'|'for'|'from'|'global'|'goto'|'if'|'import'|'in'|'is'|'lambda'|'nonlocal'|'not'|'or'|'pass'|'raise'|'return'|'try'|'while'|'with'|'yield') {
+        _PyPegen_add_restricted(p, a) ? _PyAST_Pass(EXTRA) : NULL }
+
 del_stmt[stmt_ty]:
     | 'del' a=del_targets &(';' | NEWLINE) { _PyAST_Delete(a, EXTRA) }
     | invalid_del_stmt
@@ -199,7 +203,7 @@ assert_stmt[stmt_ty]: 'assert' a=expression b=[',' z=expression { z }] { _PyAST_
 
 goto_stmt[stmt_ty]: 'goto' a=NAME { _PyAST_Goto(a->v.Name.id, EXTRA) }
 
-label_stmt[stmt_ty]: 'label' a[asdl_expr_seq*]=','.NAME+ {
+label_stmt[stmt_ty]: "label" a[asdl_expr_seq*]=','.NAME+ {
     _PyAST_Label(CHECK(asdl_identifier_seq*, _PyPegen_map_names_to_ids(p, a)), EXTRA) }
 
 import_stmt[stmt_ty]:

@@ -375,6 +375,9 @@ _PyPegen_expect_token(Parser *p, int type)
     if (t->type != type) {
        return NULL;
     }
+    if (_PyPegen_check_restricted(p, type)) {
+        return NULL;
+    }
     p->mark += 1;
     return t;
 }
@@ -744,7 +747,8 @@ compute_parser_flags(PyCompilerFlags *flags)
 
 Parser *
 _PyPegen_Parser_New(struct tok_state *tok, int start_rule, int flags,
-                    int feature_version, int *errcode, PyArena *arena)
+                    int *restricted, int *restrici, int feature_version,
+                    int *errcode, PyArena *arena)
 {
     Parser *p = PyMem_Malloc(sizeof(Parser));
     if (p == NULL) {
@@ -793,6 +797,30 @@ _PyPegen_Parser_New(struct tok_state *tok, int start_rule, int flags,
     p->level = 0;
     p->subn = 0;
     p->call_invalid_rules = 0;
+    if (restrici == NULL) {
+        restrici = PyMem_Calloc(1, sizeof(int));
+        p->ialloc = 1;
+    }
+    else {
+        p->ialloc = 0;
+    }
+    if (restricted == NULL) {
+        restricted = PyMem_Calloc(35, sizeof(int));
+        if (restricted == NULL) {
+            PyMem_Free(p->type_ignore_comments.items);
+            PyMem_Free(p->tokens[0]);
+            PyMem_Free(p->tokens);
+            PyMem_Free(p);
+            return (Parser *) PyErr_NoMemory();
+        }
+        *restrici = 0;
+        p->edalloc = 1;
+    }
+    else {
+        p->edalloc = 0;
+    }
+    p->restricted = restricted;
+    p->restrici = restrici;
 #ifdef Py_DEBUG
     p->debug = _Py_GetConfig()->parser_debug;
 #endif
@@ -878,7 +906,8 @@ _PyPegen_run_parser(Parser *p)
 mod_ty
 _PyPegen_run_parser_from_file_pointer(FILE *fp, int start_rule, PyObject *filename_ob,
                              const char *enc, const char *ps1, const char *ps2,
-                             PyCompilerFlags *flags, int *errcode, PyArena *arena)
+                             PyCompilerFlags *flags, int *restricted, int *restrici,
+                             int *errcode, PyArena *arena)
 {
     struct tok_state *tok = _PyTokenizer_FromFile(fp, enc, ps1, ps2);
     if (tok == NULL) {
@@ -899,8 +928,8 @@ _PyPegen_run_parser_from_file_pointer(FILE *fp, int start_rule, PyObject *filena
     mod_ty result = NULL;
 
     int parser_flags = compute_parser_flags(flags);
-    Parser *p = _PyPegen_Parser_New(tok, start_rule, parser_flags, PY_MINOR_VERSION,
-                                    errcode, arena);
+    Parser *p = _PyPegen_Parser_New(tok, start_rule, parser_flags, restricted,
+                                    restrici, PY_MINOR_VERSION, errcode, arena);
     if (p == NULL) {
         goto error;
     }
@@ -940,8 +969,8 @@ _PyPegen_run_parser_from_string(const char *str, int start_rule, PyObject *filen
     int parser_flags = compute_parser_flags(flags);
     int feature_version = flags && (flags->cf_flags & PyCF_ONLY_AST) ?
         flags->cf_feature_version : PY_MINOR_VERSION;
-    Parser *p = _PyPegen_Parser_New(tok, start_rule, parser_flags, feature_version,
-                                    NULL, arena);
+    Parser *p = _PyPegen_Parser_New(tok, start_rule, parser_flags, NULL, NULL,
+                                    feature_version, NULL, arena);
     if (p == NULL) {
         goto error;
     }

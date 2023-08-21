@@ -282,13 +282,31 @@ static PyMemberDef meth_members[] = {
 static PyObject *
 meth_repr(PyCFunctionObject *m)
 {
-    if (m->m_self == NULL || PyModule_Check(m->m_self))
-        return PyUnicode_FromFormat("<built-in function %s>",
-                                   m->m_ml->ml_name);
-    return PyUnicode_FromFormat("<built-in method %s of %s object at %p>",
-                               m->m_ml->ml_name,
-                               Py_TYPE(m->m_self)->tp_name,
-                               m->m_self);
+    PyObject *obj_repr;
+
+    if (m->m_self == NULL)
+        return PyUnicode_FromString(m->m_ml->ml_name);
+    if (PyModule_Check(m->m_self)) {
+        obj_repr = ((PyModuleObject *)m->m_self)->md_name;
+        if (_PyUnicode_Equal(obj_repr, &_Py_ID(builtins)) ||
+            _PyUnicode_EqualToASCIIString(obj_repr, "__main__"))
+        {
+            return PyUnicode_FromString(m->m_ml->ml_name);
+        }
+    }
+    else {
+        if (PyLong_CheckExact(m->m_self)) {
+            return PyUnicode_FromFormat("%R .%s",
+                                        m->m_self, m->m_ml->ml_name);
+        }
+        obj_repr = PyObject_Repr(m->m_self);
+        if (obj_repr == NULL) {
+            return NULL;
+        }
+    }
+    PyObject *rtn = PyUnicode_FromFormat("%U.%s", obj_repr, m->m_ml->ml_name);
+    Py_DECREF(obj_repr);
+    return rtn;
 }
 
 static PyObject *

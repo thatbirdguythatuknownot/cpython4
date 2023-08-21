@@ -1902,6 +1902,15 @@ Struct_iter_unpack(PyStructObject *self, PyObject *buffer)
 }
 
 
+static PyObject *
+s_repr(PyStructObject *self)
+{
+    return PyUnicode_FromFormat("%R(%R)",
+                                Py_TYPE(self),
+                                self->s_format);
+}
+
+
 /*
  * Guts of the pack function.
  *
@@ -2197,6 +2206,7 @@ static PyType_Slot PyStructType_slots[] = {
     {Py_tp_getattro, PyObject_GenericGetAttr},
     {Py_tp_setattro, PyObject_GenericSetAttr},
     {Py_tp_doc, (void*)s__doc__},
+    {Py_tp_repr, s_repr},
     {Py_tp_traverse, s_traverse},
     {Py_tp_clear, s_clear},
     {Py_tp_methods, s_methods},

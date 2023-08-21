@@ -682,6 +682,7 @@ compiler_set_qualname(struct compiler *c)
     Py_ssize_t stack_size;
     struct compiler_unit *u = c->u;
     PyObject *name, *base;
+    int name_has_comm = 0;
 
     base = NULL;
     stack_size = PyList_GET_SIZE(c->c_stack);
@@ -729,12 +730,13 @@ compiler_set_qualname(struct compiler *c)
                 || parent->u_scope_type == COMPILER_SCOPE_ASYNC_FUNCTION
                 || parent->u_scope_type == COMPILER_SCOPE_LAMBDA)
             {
-                _Py_DECLARE_STR(dot_locals, ".<locals>");
+                _Py_DECLARE_STR(comm_at, "@");
                 base = PyUnicode_Concat(parent->u_metadata.u_qualname,
-                                        &_Py_STR(dot_locals));
+                                        &_Py_STR(comm_at));
                 if (base == NULL) {
                     return ERROR;
                 }
+                name_has_comm = 1;
             }
             else {
                 base = Py_NewRef(parent->u_metadata.u_qualname);
@@ -743,11 +745,16 @@ compiler_set_qualname(struct compiler *c)
     }
 
     if (base != NULL) {
-        _Py_DECLARE_STR(dot, ".");
-        name = PyUnicode_Concat(base, &_Py_STR(dot));
-        Py_DECREF(base);
-        if (name == NULL) {
-            return ERROR;
+        if (!name_has_comm) {
+            _Py_DECLARE_STR(dot, ".");
+            name = PyUnicode_Concat(base, &_Py_STR(dot));
+            Py_DECREF(base);
+            if (name == NULL) {
+                return ERROR;
+            }
+        }
+        else {
+            name = base;
         }
         PyUnicode_Append(&name, u->u_metadata.u_name);
         if (name == NULL) {

@@ -544,12 +544,12 @@ extern "C" {
     INIT_STR(anon_string, "<string>"), \
     INIT_STR(anon_unknown, "<unknown>"), \
     INIT_STR(close_br, "}"), \
+    INIT_STR(comm_at, "@"), \
     INIT_STR(dbl_close_br, "}}"), \
     INIT_STR(dbl_open_br, "{{"), \
     INIT_STR(dbl_percent, "%%"), \
     INIT_STR(defaults, ".defaults"), \
     INIT_STR(dot, "."), \
-    INIT_STR(dot_locals, ".<locals>"), \
     INIT_STR(empty, ""), \
     INIT_STR(generic_base, ".generic_base"), \
     INIT_STR(json_decoder, "json.decoder"), \

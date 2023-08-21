@@ -1634,10 +1634,47 @@ type_repr(PyTypeObject *type)
         return NULL;
     }
 
-    if (mod != NULL && !_PyUnicode_Equal(mod, &_Py_ID(builtins)))
-        rtn = PyUnicode_FromFormat("<class '%U.%U'>", mod, name);
-    else
-        rtn = PyUnicode_FromFormat("<class '%s'>", type->tp_name);
+    if (!Py_IS_TYPE(type, &PyType_Type) ||
+        !PyUnicode_IsIdentifier(name))
+    {
+        if (!Py_IS_TYPE(type, &PyType_Type)) {
+            PyObject *meta_repr = type_repr(Py_TYPE(type));
+            if (meta_repr == NULL) {
+                Py_XDECREF(mod);
+                return NULL;
+            }
+            if (mod && !_PyUnicode_Equal(mod, &_Py_ID(builtins)) &&
+                !_PyUnicode_EqualToASCIIString(mod, "__main__"))
+            {
+                rtn = PyUnicode_FromFormat("<%U '%U.%U'>",
+                                           meta_repr, mod, name);
+            }
+            else {
+                rtn = PyUnicode_FromFormat("<%U '%U'>", meta_repr, name);
+            }
+            Py_DECREF(meta_repr);
+        }
+        else {
+            if (mod && !_PyUnicode_Equal(mod, &_Py_ID(builtins)) &&
+                !_PyUnicode_EqualToASCIIString(mod, "__main__"))
+            {
+                rtn = PyUnicode_FromFormat("<class '%U.%U'>", mod, name);
+            }
+            else {
+                rtn = PyUnicode_FromFormat("<class '%U'>", name);
+            }
+        }
+    }
+    else {
+        if (mod && !_PyUnicode_Equal(mod, &_Py_ID(builtins)) &&
+            !_PyUnicode_EqualToASCIIString(mod, "__main__"))
+        {
+            rtn = PyUnicode_FromFormat("%U.%U", mod, name);
+        }
+        else {
+            rtn = PyUnicode_FromFormat("%U", name);
+        }
+    }
 
     Py_XDECREF(mod);
     Py_DECREF(name);
@@ -5558,28 +5595,14 @@ object_dealloc(PyObject *self)
 static PyObject *
 object_repr(PyObject *self)
 {
-    PyTypeObject *type;
-    PyObject *mod, *name, *rtn;
+    PyObject *tprepr, *rtn;
 
-    type = Py_TYPE(self);
-    mod = type_module(type, NULL);
-    if (mod == NULL)
-        PyErr_Clear();
-    else if (!PyUnicode_Check(mod)) {
-        Py_SETREF(mod, NULL);
-    }
-    name = type_qualname(type, NULL);
-    if (name == NULL) {
-        Py_XDECREF(mod);
+    tprepr = type_repr(Py_TYPE(self));
+    if (tprepr == NULL) {
         return NULL;
     }
-    if (mod != NULL && !_PyUnicode_Equal(mod, &_Py_ID(builtins)))
-        rtn = PyUnicode_FromFormat("<%U.%U object at %p>", mod, name, self);
-    else
-        rtn = PyUnicode_FromFormat("<%s object at %p>",
-                                  type->tp_name, self);
-    Py_XDECREF(mod);
-    Py_DECREF(name);
+    rtn = PyUnicode_FromFormat("<%U at %p>", tprepr, self);
+    Py_DECREF(tprepr);
     return rtn;
 }
 

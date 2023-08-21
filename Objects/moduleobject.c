@@ -728,10 +728,19 @@ module_dealloc(PyModuleObject *m)
 }
 
 static PyObject *
-module_repr(PyModuleObject *m)
+module_str(PyModuleObject *m)
 {
     PyInterpreterState *interp = _PyInterpreterState_GET();
     return _PyImport_ImportlibModuleRepr(interp, (PyObject *)m);
+}
+
+static PyObject *
+module_repr(PyModuleObject *m)
+{
+    return
+        m->md_name ?
+        Py_NewRef(m->md_name) :
+        PyUnicode_FromString("<modnil>");
 }
 
 /* Check if the "_initializing" attribute of the module spec is set to true.
@@ -1016,7 +1025,7 @@ PyTypeObject PyModule_Type = {
     0,                                          /* tp_as_mapping */
     0,                                          /* tp_hash */
     0,                                          /* tp_call */
-    0,                                          /* tp_str */
+    (reprfunc)module_str,                       /* tp_str */
     (getattrofunc)_Py_module_getattro,          /* tp_getattro */
     PyObject_GenericSetAttr,                    /* tp_setattro */
     0,                                          /* tp_as_buffer */

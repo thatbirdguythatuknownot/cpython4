@@ -862,8 +862,76 @@ func_dealloc(PyFunctionObject *op)
 static PyObject*
 func_repr(PyFunctionObject *op)
 {
-    return PyUnicode_FromFormat("<function %U at %p>",
-                                op->func_qualname, op);
+#define WRITE(type, ...) \
+    if (_PyUnicodeWriter_Write##type(&writer, __VA_ARGS__) < 0) { \
+        goto error; \
+    } \
+
+    PyCodeObject *co;
+    _PyUnicodeWriter writer;
+    int index;
+
+    if (op->func_closure == NULL) {
+        return
+            !_PyUnicode_EqualToASCIIString(op->func_module, "builtins") &&
+            !_PyUnicode_EqualToASCIIString(op->func_module, "__main__") ?
+            PyUnicode_Concat(op->func_module, op->func_qualname) :
+            op->func_qualname;
+    }
+
+    _PyUnicodeWriter_Init(&writer);
+    writer.min_length = PyUnicode_GET_LENGTH(op->func_qualname) + 9;
+    writer.overallocate = 1;
+
+    if (!_PyUnicode_EqualToASCIIString(op->func_name, "<lambda>")) {
+        WRITE(ASCIIString, "<function ", 10);
+    }
+    else {
+        WRITE(ASCIIString, "<lambda ", 8);
+    }
+
+    if (!_PyUnicode_Equal(op->func_module, &_Py_ID(builtins)) &&
+        !_PyUnicode_EqualToASCIIString(op->func_module, "__main__"))
+    {
+        WRITE(Str, op->func_module);
+    }
+
+    WRITE(Str, op->func_qualname);
+
+    co = (PyCodeObject *)op->func_code;
+    index = 0;
+    for (int offset = 0; offset < co->co_nlocalsplus; offset++) {
+        _PyLocals_Kind k = _PyLocals_GetKind(co->co_localspluskinds, offset);
+        if ((k & CO_FAST_FREE) == 0) {
+            continue;
+        }
+
+        assert(index < PyTuple_GET_SIZE(op->func_closure));
+        PyObject *name = PyTuple_GET_ITEM(co->co_localsplusnames, offset);
+        PyObject *item = PyTuple_GET_ITEM(op->func_closure, index);
+        PyObject *repr_res = PyObject_Repr(PyCell_GET(item));
+        if (repr_res == NULL) {
+            goto error;
+        }
+
+        WRITE(Char, ' ');
+        WRITE(Str, name);
+        WRITE(Char, '=');
+        if (_PyUnicodeWriter_WriteStr(&writer, repr_res) == -1) {
+            Py_DECREF(repr_res);
+            goto error;
+        }
+        Py_DECREF(repr_res);
+
+        index++;
+    }
+
+    WRITE(Char, '>');
+    return _PyUnicodeWriter_Finish(&writer);
+
+  error:
+    _PyUnicodeWriter_Dealloc(&writer);
+    return NULL;
 }
 
 static int
@@ -1091,7 +1159,9 @@ static PyGetSetDef cm_getsetlist[] = {
 static PyObject*
 cm_repr(classmethod *cm)
 {
-    return PyUnicode_FromFormat("<classmethod(%R)>", cm->cm_callable);
+    return PyUnicode_FromFormat("%R(%R)",
+                                Py_TYPE(cm),
+                                cm->cm_callable);
 }
 
 PyDoc_STRVAR(classmethod_doc,
@@ -1286,7 +1356,9 @@ static PyGetSetDef sm_getsetlist[] = {
 static PyObject*
 sm_repr(staticmethod *sm)
 {
-    return PyUnicode_FromFormat("<staticmethod(%R)>", sm->sm_callable);
+    return PyUnicode_FromFormat("%R(%R)",
+                                Py_TYPE(sm),
+                                sm->sm_callable);
 }
 
 PyDoc_STRVAR(staticmethod_doc,

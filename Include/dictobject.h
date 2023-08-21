@@ -13,12 +13,23 @@ extern "C" {
 */
 
 PyAPI_DATA(PyTypeObject) PyDict_Type;
+PyAPI_DATA(PyTypeObject) PyFrozenDict_Type;
 
 #define PyDict_Check(op) \
                  PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_DICT_SUBCLASS)
 #define PyDict_CheckExact(op) Py_IS_TYPE((op), &PyDict_Type)
 
+#define PyFrozenDict_Check(op) \
+                 PyObject_TypeCheck((op), &PyFrozenDict_Type)
+#define PyFrozenDict_CheckExact(op) Py_IS_TYPE((op), &PyFrozenDict_Type)
+
+#define PyAnyDict_Check(op) \
+    (PyDict_Check(op) || PyFrozenDict_Check(op))
+#define PyAnyDict_CheckExact(op) \
+    (PyDict_CheckExact(op) || PyFrozenDict_CheckExact(op))
+
 PyAPI_FUNC(PyObject *) PyDict_New(void);
+PyAPI_FUNC(PyObject *) PyFrozenDict_New(void);
 PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key);
 PyAPI_FUNC(PyObject *) PyDict_GetItemWithError(PyObject *mp, PyObject *key);
 PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item);

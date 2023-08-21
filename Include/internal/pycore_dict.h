@@ -204,6 +204,10 @@ extern PyObject *_PyDict_FromItems(
         PyObject *const *keys, Py_ssize_t keys_offset,
         PyObject *const *values, Py_ssize_t values_offset,
         Py_ssize_t length);
+extern PyObject *_PyFrozenDict_FromItems(
+        PyObject *const *keys, Py_ssize_t keys_offset,
+        PyObject *const *values, Py_ssize_t values_offset,
+        Py_ssize_t length);
 
 static inline void
 _PyDictValues_AddToInsertionOrder(PyDictValues *values, Py_ssize_t ix)

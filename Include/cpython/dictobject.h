@@ -30,6 +30,9 @@ typedef struct {
        If ma_values is not NULL, the table is split:
        keys are stored in ma_keys and values are stored in ma_values */
     PyDictValues *ma_values;
+
+    Py_hash_t ma_hash; /* -1 if the dict is not frozen
+                          or hash is not yet calculated */
 } PyDictObject;
 
 PyAPI_FUNC(PyObject *) _PyDict_GetItem_KnownHash(PyObject *mp, PyObject *key,

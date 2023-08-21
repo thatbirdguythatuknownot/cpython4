@@ -3123,6 +3123,7 @@ _PyBuiltin_Init(PyInterpreterState *interp)
     SETBUILTIN("classmethod",           &PyClassMethod_Type);
     SETBUILTIN("complex",               &PyComplex_Type);
     SETBUILTIN("dict",                  &PyDict_Type);
+    SETBUILTIN("frozendict",            &PyFrozenDict_Type);
     SETBUILTIN("enumerate",             &PyEnum_Type);
     SETBUILTIN("filter",                &PyFilter_Type);
     SETBUILTIN("float",                 &PyFloat_Type);

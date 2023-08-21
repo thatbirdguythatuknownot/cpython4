@@ -5,6 +5,7 @@
 #include "pycore_long.h"          // _PyLong
 #include "pycore_pystate.h"       // _PyThreadState_GET()
 #include "pycore_setobject.h"     // _PySet_NextEntry()
+#include "pycore_dict.h"          // _PyFrozenDict_FromItems()
 
 
 typedef struct {
@@ -617,6 +618,32 @@ fold_iter(expr_ty arg, PyArena *arena, _PyASTOptimizeState *state)
         newval = make_const_tuple(arg->v.Set.elts);
         if (newval) {
             Py_SETREF(newval, PyFrozenSet_New(newval));
+        }
+    }
+    else if (arg->kind == Dict_kind) {
+        PyObject *keys = make_const_tuple(arg->v.Dict.keys);
+        if (keys) {
+            if (PyTuple_GET_SIZE(keys) == 0) {
+                Py_DECREF(keys);
+                newval = PyFrozenDict_New();
+            }
+            else {
+                PyObject *values = make_const_tuple(arg->v.Dict.values);
+                if (values) {
+                    newval = _PyFrozenDict_FromItems(
+                        &PyTuple_GET_ITEM(keys, 0), 1,
+                        &PyTuple_GET_ITEM(values, 0), 1,
+                        PyTuple_GET_SIZE(keys)
+                    );
+                    Py_DECREF(keys);
+                    Py_DECREF(values);
+                }
+                else {
+                    PyErr_Clear();
+                    Py_DECREF(keys);
+                    return 1;
+                }
+            }
         }
     }
     else {

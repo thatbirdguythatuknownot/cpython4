@@ -157,6 +157,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Template_type);
     Py_CLEAR(state->TryStar_type);
     Py_CLEAR(state->Try_type);
+    Py_CLEAR(state->TupleComp_type);
     Py_CLEAR(state->Tuple_type);
     Py_CLEAR(state->TypeAlias_type);
     Py_CLEAR(state->TypeIgnore_type);
@@ -593,6 +594,10 @@ static const char * const Set_fields[]={
     "elts",
 };
 static const char * const ListComp_fields[]={
+    "elt",
+    "generators",
+};
+static const char * const TupleComp_fields[]={
     "elt",
     "generators",
 };
@@ -1389,6 +1394,7 @@ init_types(struct ast_state *state)
         "     | Dict(expr* keys, expr* values)\n"
         "     | Set(expr* elts)\n"
         "     | ListComp(expr elt, comprehension* generators)\n"
+        "     | TupleComp(expr elt, comprehension* generators)\n"
         "     | SetComp(expr elt, comprehension* generators)\n"
         "     | DictComp(expr key, expr value, comprehension* generators)\n"
         "     | GeneratorExp(expr elt, comprehension* generators)\n"
@@ -1454,6 +1460,10 @@ init_types(struct ast_state *state)
                                      ListComp_fields, 2,
         "ListComp(expr elt, comprehension* generators)");
     if (!state->ListComp_type) return 0;
+    state->TupleComp_type = make_type(state, "TupleComp", state->expr_type,
+                                      TupleComp_fields, 2,
+        "TupleComp(expr elt, comprehension* generators)");
+    if (!state->TupleComp_type) return 0;
     state->SetComp_type = make_type(state, "SetComp", state->expr_type,
                                     SetComp_fields, 2,
         "SetComp(expr elt, comprehension* generators)");
@@ -3027,6 +3037,30 @@ _PyAST_ListComp(expr_ty elt, asdl_comprehension_seq * generators, int lineno,
     p->kind = ListComp_kind;
     p->v.ListComp.elt = elt;
     p->v.ListComp.generators = generators;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+expr_ty
+_PyAST_TupleComp(expr_ty elt, asdl_comprehension_seq * generators, int lineno,
+                 int col_offset, int end_lineno, int end_col_offset, PyArena
+                 *arena)
+{
+    expr_ty p;
+    if (!elt) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'elt' is required for TupleComp");
+        return NULL;
+    }
+    p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = TupleComp_kind;
+    p->v.TupleComp.elt = elt;
+    p->v.TupleComp.generators = generators;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -4778,6 +4812,22 @@ ast2obj_expr(struct ast_state *state, void* _o)
             goto failed;
         Py_DECREF(value);
         value = ast2obj_list(state, (asdl_seq*)o->v.ListComp.generators,
+                             ast2obj_comprehension);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->generators, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
+    case TupleComp_kind:
+        tp = (PyTypeObject *)state->TupleComp_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_expr(state, o->v.TupleComp.elt);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->elt, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_list(state, (asdl_seq*)o->v.TupleComp.generators,
                              ast2obj_comprehension);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->generators, value) == -1)
@@ -9589,6 +9639,75 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         if (*out == NULL) goto failed;
         return 0;
     }
+    tp = state->TupleComp_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        expr_ty elt;
+        asdl_comprehension_seq* generators;
+
+        if (PyObject_GetOptionalAttr(obj, state->elt, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"elt\" missing from TupleComp");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'TupleComp' node")) {
+                goto failed;
+            }
+            res = obj2ast_expr(state, tmp, &elt, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        if (PyObject_GetOptionalAttr(obj, state->generators, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            tmp = PyList_New(0);
+            if (tmp == NULL) {
+                return 1;
+            }
+        }
+        {
+            int res;
+            Py_ssize_t len;
+            Py_ssize_t i;
+            if (!PyList_Check(tmp)) {
+                PyErr_Format(PyExc_TypeError, "TupleComp field \"generators\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+                goto failed;
+            }
+            len = PyList_GET_SIZE(tmp);
+            generators = _Py_asdl_comprehension_seq_new(len, arena);
+            if (generators == NULL) goto failed;
+            for (i = 0; i < len; i++) {
+                comprehension_ty val;
+                PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+                if (_Py_EnterRecursiveCall(" while traversing 'TupleComp' node")) {
+                    goto failed;
+                }
+                res = obj2ast_comprehension(state, tmp2, &val, arena);
+                _Py_LeaveRecursiveCall();
+                Py_DECREF(tmp2);
+                if (res != 0) goto failed;
+                if (len != PyList_GET_SIZE(tmp)) {
+                    PyErr_SetString(PyExc_RuntimeError, "TupleComp field \"generators\" changed size during iteration");
+                    goto failed;
+                }
+                asdl_seq_SET(generators, i, val);
+            }
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_TupleComp(elt, generators, lineno, col_offset,
+                                end_lineno, end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
     tp = state->SetComp_type;
     isinstance = PyObject_IsInstance(obj, tp);
     if (isinstance == -1) {
@@ -13137,6 +13256,9 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "ListComp", state->ListComp_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "TupleComp", state->TupleComp_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "SetComp", state->SetComp_type) < 0) {

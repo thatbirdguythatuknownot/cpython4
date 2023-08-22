@@ -234,6 +234,7 @@ static int symtable_visit_expr(struct symtable *st, expr_ty s);
 static int symtable_visit_type_param(struct symtable *st, type_param_ty s);
 static int symtable_visit_genexp(struct symtable *st, expr_ty s);
 static int symtable_visit_listcomp(struct symtable *st, expr_ty s);
+static int symtable_visit_tuplecomp(struct symtable *st, expr_ty s);
 static int symtable_visit_setcomp(struct symtable *st, expr_ty s);
 static int symtable_visit_dictcomp(struct symtable *st, expr_ty s);
 static int symtable_visit_arguments(struct symtable *st, arguments_ty);
@@ -2006,6 +2007,10 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         if (!symtable_visit_listcomp(st, e))
             VISIT_QUIT(st, 0);
         break;
+    case TupleComp_kind:
+        if (!symtable_visit_tuplecomp(st, e))
+            VISIT_QUIT(st, 0);
+        break;
     case SetComp_kind:
         if (!symtable_visit_setcomp(st, e))
             VISIT_QUIT(st, 0);
@@ -2444,6 +2449,9 @@ symtable_handle_comprehension(struct symtable *st, expr_ty e,
         case ListComp_kind:
             st->st_cur->ste_comprehension = ListComprehension;
             break;
+        case TupleComp_kind:
+            st->st_cur->ste_comprehension = TupleComprehension;
+            break;
         case SetComp_kind:
             st->st_cur->ste_comprehension = SetComprehension;
             break;
@@ -2501,6 +2509,14 @@ symtable_visit_listcomp(struct symtable *st, expr_ty e)
 }
 
 static int
+symtable_visit_tuplecomp(struct symtable *st, expr_ty e)
+{
+    return symtable_handle_comprehension(st, e, &_Py_ID(tuplecomp),
+                                         e->v.TupleComp.generators,
+                                         e->v.TupleComp.elt, NULL);
+}
+
+static int
 symtable_visit_setcomp(struct symtable *st, expr_ty e)
 {
     return symtable_handle_comprehension(st, e, &_Py_ID(setcomp),
@@ -2545,6 +2561,7 @@ symtable_raise_if_comprehension_block(struct symtable *st, expr_ty e) {
     _Py_comprehension_ty type = st->st_cur->ste_comprehension;
     PyErr_SetString(PyExc_SyntaxError,
             (type == ListComprehension) ? "'yield' inside list comprehension" :
+            (type == TupleComprehension) ? "'yield' inside tuple comprehension" :
             (type == SetComprehension) ? "'yield' inside set comprehension" :
             (type == DictComprehension) ? "'yield' inside dict comprehension" :
             "'yield' inside generator expression");

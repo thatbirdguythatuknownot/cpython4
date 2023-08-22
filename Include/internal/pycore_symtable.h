@@ -24,10 +24,11 @@ typedef enum _block_type {
 
 typedef enum _comprehension_type {
     NoComprehension = 0,
-    ListComprehension = 1,
-    DictComprehension = 2,
-    SetComprehension = 3,
-    GeneratorExpression = 4 } _Py_comprehension_ty;
+    ListComprehension,
+    TupleComprehension,
+    DictComprehension,
+    SetComprehension,
+    GeneratorExpression } _Py_comprehension_ty;
 
 struct _symtable_entry;
 

@@ -305,6 +305,7 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
                 validate_expr(state, exp->v.NAME.elt, Load); \
             break;
     COMP(ListComp)
+    COMP(TupleComp)
     COMP(SetComp)
     COMP(GeneratorExp)
 #undef COMP

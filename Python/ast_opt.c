@@ -740,6 +740,11 @@ fold_comp_internal(expr_ty node_, int *ptr, expr_ty sub,
         CALL_SEQ(fold_comp_compinternal, comprehension,
                  node_->v.ListComp.generators);
         break;
+    case TupleComp_kind:
+        CALL(node_->v.TupleComp.elt);
+        CALL_SEQ(fold_comp_compinternal, comprehension,
+                 node_->v.TupleComp.generators);
+        break;
     case SetComp_kind:
         CALL(node_->v.SetComp.elt);
         CALL_SEQ(fold_comp_compinternal, comprehension,
@@ -1025,6 +1030,10 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case ListComp_kind:
         CALL(astfold_expr, expr_ty, node_->v.ListComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.ListComp.generators);
+        break;
+    case TupleComp_kind:
+        CALL(astfold_expr, expr_ty, node_->v.TupleComp.elt);
+        CALL_SEQ(astfold_comprehension, comprehension, node_->v.TupleComp.generators);
         break;
     case SetComp_kind:
         CALL(astfold_expr, expr_ty, node_->v.SetComp.elt);

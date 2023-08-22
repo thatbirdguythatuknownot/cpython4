@@ -542,6 +542,7 @@ extern "C" {
     INIT_STR(anon_null, "<NULL>"), \
     INIT_STR(anon_setcomp, "<setcomp>"), \
     INIT_STR(anon_string, "<string>"), \
+    INIT_STR(anon_tuplecomp, "<tuplecomp>"), \
     INIT_STR(anon_unknown, "<unknown>"), \
     INIT_STR(close_br, "}"), \
     INIT_STR(comm_at, "@"), \
@@ -1230,6 +1231,7 @@ extern "C" {
     INIT_ID(translate), \
     INIT_ID(true), \
     INIT_ID(truncate), \
+    INIT_ID(tuplecomp), \
     INIT_ID(twice), \
     INIT_ID(txt), \
     INIT_ID(type), \

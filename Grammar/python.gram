@@ -839,7 +839,7 @@ await_primary[expr_ty] (memo):
 
 primary[expr_ty]:
     | a=primary '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, EXTRA) }
-    | a=primary b=genexp { _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
+    | a=primary b=(genexp | tuplecomp) { _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
     | a=primary '(' b=[arguments] ')' {
         _PyAST_Call(a,
                  (b) ? ((expr_ty) b)->v.Call.args : NULL,
@@ -867,7 +867,7 @@ atom[expr_ty]:
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
     | &(STRING|FSTRING_START) strings
     | NUMBER
-    | &'(' (tuple | group | genexp)
+    | &'(' (tuple | group | genexp | tuplecomp)
     | &'[' (list | listcomp)
     | &'{' (dict | set | dictcomp | setcomp)
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }
@@ -994,10 +994,16 @@ for_if_clause[comprehension_ty]:
         CHECK_VERSION(comprehension_ty, 6, "Async comprehensions are", _PyAST_comprehension(a, b, c, 1, p->arena)) }
     | 'for' a=star_targets 'in' ~ b=disjunction c[asdl_expr_seq*]=('if' z=disjunction { z })* {
         _PyAST_comprehension(a, b, c, 0, p->arena) }
+    | "where" a=star_targets '=' b=disjunction c[asdl_expr_seq*]=('if' z=disjunction { z })* {
+        _PyAST_comprehension(a, _PyAST_List(CHECK(asdl_expr_seq*, _PyPegen_singleton_seq(p, b)), Load, EXTRA), c, 0, p->arena) }
     | invalid_for_target
 
 listcomp[expr_ty]:
     | '[' a=named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
+    | invalid_comprehension
+
+tuplecomp[expr_ty]:
+    | '(' a=named_expression b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
 setcomp[expr_ty]:
@@ -1242,7 +1248,12 @@ invalid_comprehension:
     | ('[' | '{') a=star_named_expression ',' b=star_named_expressions for_if_clauses {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, PyPegen_last_item(b, expr_ty),
         "did you forget parentheses around the comprehension target?") }
+    | '(' a=star_named_expression ',' b=star_named_expressions for_if_clauses ',' {
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, PyPegen_last_item(b, expr_ty),
+        "did you forget parentheses around the comprehension target?") }
     | ('[' | '{') a=star_named_expression b=',' for_if_clauses {
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "did you forget parentheses around the comprehension target?") }
+    | '(' a=star_named_expression b=',' for_if_clauses ',' {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "did you forget parentheses around the comprehension target?") }
 invalid_dict_comprehension:
     | '{' a='**' bitwise_or for_if_clauses '}' {

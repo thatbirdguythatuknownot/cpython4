@@ -117,6 +117,7 @@ extern "C" {
 #define SET_UPDATE                             163
 #define DICT_MERGE                             164
 #define DICT_UPDATE                            165
+#define LIST_TO_TUPLE                          166
 #define LOAD_FAST_LOAD_FAST                    168
 #define STORE_FAST_LOAD_FAST                   169
 #define STORE_FAST_STORE_FAST                  170
@@ -218,18 +219,18 @@ extern "C" {
 #define CALL_NO_KW_TYPE_1                      159
 #define CALL_NO_KW_STR_1                       160
 #define CALL_NO_KW_TUPLE_1                     161
-#define CALL_BUILTIN_CLASS                     166
-#define CALL_NO_KW_BUILTIN_O                   167
-#define CALL_NO_KW_BUILTIN_FAST                178
-#define CALL_BUILTIN_FAST_WITH_KEYWORDS        179
-#define CALL_NO_KW_LEN                         180
-#define CALL_NO_KW_ISINSTANCE                  181
-#define CALL_NO_KW_LIST_APPEND                 182
-#define CALL_NO_KW_METHOD_DESCRIPTOR_O         183
-#define CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS 184
-#define CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS    185
-#define CALL_NO_KW_METHOD_DESCRIPTOR_FAST      186
-#define CALL_NO_KW_ALLOC_AND_ENTER_INIT        187
+#define CALL_BUILTIN_CLASS                     167
+#define CALL_NO_KW_BUILTIN_O                   178
+#define CALL_NO_KW_BUILTIN_FAST                179
+#define CALL_BUILTIN_FAST_WITH_KEYWORDS        180
+#define CALL_NO_KW_LEN                         181
+#define CALL_NO_KW_ISINSTANCE                  182
+#define CALL_NO_KW_LIST_APPEND                 183
+#define CALL_NO_KW_METHOD_DESCRIPTOR_O         184
+#define CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS 185
+#define CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS    186
+#define CALL_NO_KW_METHOD_DESCRIPTOR_FAST      187
+#define CALL_NO_KW_ALLOC_AND_ENTER_INIT        188
 
 
 #ifdef __cplusplus

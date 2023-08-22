@@ -550,6 +550,7 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_null));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_setcomp));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_string));
+    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_tuplecomp));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(anon_unknown));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(close_br));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_STR(comm_at));
@@ -1235,6 +1236,7 @@ _PyStaticObjects_CheckRefcnt(PyInterpreterState *interp) {
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(translate));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(true));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(truncate));
+    _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(tuplecomp));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(twice));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(txt));
     _PyStaticObject_CheckRefcnt((PyObject *)&_Py_ID(type));

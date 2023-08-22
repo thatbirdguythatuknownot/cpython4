@@ -43,8 +43,9 @@
 
 #define COMP_GENEXP   0
 #define COMP_LISTCOMP 1
-#define COMP_SETCOMP  2
-#define COMP_DICTCOMP 3
+#define COMP_TUPLECOMP 2
+#define COMP_SETCOMP  3
+#define COMP_DICTCOMP 4
 
 /* A soft limit for stack use, to avoid excessive
  * memory use for large constants, etc.
@@ -4748,6 +4749,7 @@ infer_type(expr_ty e)
 {
     switch (e->kind) {
     case Tuple_kind:
+    case TupleComp_kind:
         return &PyTuple_Type;
     case List_kind:
     case ListComp_kind:
@@ -4778,6 +4780,7 @@ check_caller(struct compiler *c, expr_ty e)
     switch (e->kind) {
     case Constant_kind:
     case Tuple_kind:
+    case TupleComp_kind:
     case List_kind:
     case ListComp_kind:
     case Dict_kind:
@@ -4846,6 +4849,7 @@ check_index(struct compiler *c, expr_ty e, expr_ty s)
         }
         /* fall through */
     case Tuple_kind:
+    case TupleComp_kind:
     case List_kind:
     case ListComp_kind:
     case JoinedStr_kind:
@@ -5462,6 +5466,7 @@ compiler_sync_comprehension_generator(struct compiler *c, location loc,
             ADDOP(c, elt_loc, POP_TOP);
             break;
         case COMP_LISTCOMP:
+        case COMP_TUPLECOMP:
             VISIT(c, expr, elt);
             ADDOP_I(c, elt_loc, LIST_APPEND, depth + 1);
             break;
@@ -5561,6 +5566,7 @@ compiler_async_comprehension_generator(struct compiler *c, location loc,
             ADDOP(c, elt_loc, POP_TOP);
             break;
         case COMP_LISTCOMP:
+        case COMP_TUPLECOMP:
             VISIT(c, expr, elt);
             ADDOP_I(c, elt_loc, LIST_APPEND, depth + 1);
             break;
@@ -5826,6 +5832,7 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
         int op;
         switch (type) {
         case COMP_LISTCOMP:
+        case COMP_TUPLECOMP:
             op = BUILD_LIST;
             break;
         case COMP_SETCOMP:
@@ -5859,6 +5866,9 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
     }
 
     if (type != COMP_GENEXP) {
+        if (type == COMP_TUPLECOMP) {
+            ADDOP(c, LOC(e), LIST_TO_TUPLE);
+        }
         ADDOP(c, LOC(e), RETURN_VALUE);
     }
     if (type == COMP_GENEXP) {
@@ -5926,6 +5936,16 @@ compiler_listcomp(struct compiler *c, expr_ty e)
     return compiler_comprehension(c, e, COMP_LISTCOMP, &_Py_STR(anon_listcomp),
                                   e->v.ListComp.generators,
                                   e->v.ListComp.elt, NULL);
+}
+
+static int
+compiler_tuplecomp(struct compiler *c, expr_ty e)
+{
+    assert(e->kind == TupleComp_kind);
+    _Py_DECLARE_STR(anon_tuplecomp, "<tuplecomp>");
+    return compiler_comprehension(c, e, COMP_TUPLECOMP, &_Py_STR(anon_tuplecomp),
+                                  e->v.TupleComp.generators,
+                                  e->v.TupleComp.elt, NULL);
 }
 
 static int
@@ -6235,6 +6255,8 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_genexp(c, e);
     case ListComp_kind:
         return compiler_listcomp(c, e);
+    case TupleComp_kind:
+        return compiler_tuplecomp(c, e);
     case SetComp_kind:
         return compiler_setcomp(c, e);
     case DictComp_kind:

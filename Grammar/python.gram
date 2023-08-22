@@ -839,7 +839,7 @@ await_primary[expr_ty] (memo):
 
 primary[expr_ty]:
     | a=primary '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, EXTRA) }
-    | a=primary b=(genexp | tuplecomp) { _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
+    | a=primary b=(genexp | tuplecomp | slice_literal) { _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
     | a=primary '(' b=[arguments] ')' {
         _PyAST_Call(a,
                  (b) ? ((expr_ty) b)->v.Call.args : NULL,
@@ -852,9 +852,13 @@ slices[expr_ty]:
     | a=slice !',' { a }
     | a[asdl_expr_seq*]=','.(slice | starred_expression)+ [','] { _PyAST_Tuple(a, Load, EXTRA) }
 
-slice[expr_ty]:
+slice[expr_ty]: simple_slice | named_expression
+
+simple_slice[expr_ty]:
     | a=[expression] ':' b=[expression] c=[':' d=[expression] { d }] { _PyAST_Slice(a, b, c, EXTRA) }
-    | a=named_expression { a }
+
+slice_literal[expr_ty]:
+    | '(' a=simple_slice ')' { a }
 
 atom[expr_ty]:
     | NAME
@@ -867,7 +871,7 @@ atom[expr_ty]:
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
     | &(STRING|FSTRING_START) strings
     | NUMBER
-    | &'(' (tuple | group | genexp | tuplecomp)
+    | &'(' (tuple | group | genexp | tuplecomp | slice_literal)
     | &'[' (list | listcomp)
     | &'{' (dict | set | dictcomp | setcomp)
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }

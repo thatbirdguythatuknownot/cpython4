@@ -63,6 +63,7 @@ raised for division by zero and mod by zero.
 #include "pycore_moduleobject.h"  // _PyModule_GetState()
 #include "pycore_object.h"        // _PyObject_LookupSpecial()
 #include "pycore_pymath.h"        // _PY_SHORT_FLOAT_REPR
+#include "pycore_list.h"          // _Py_memory_repeat
 /* For DBL_EPSILON in _math.h */
 #include <float.h>
 /* For _Py_log1p with workarounds for buggy handling of zeros. */
@@ -4020,6 +4021,207 @@ math_ulp_impl(PyObject *module, double x)
     return x2 - x;
 }
 
+/*[clinic input]
+math.factorize
+
+    n: object
+    /
+
+Return the prime factorization of an integer in a list.
+
+If the integer is negative, the first term in the list will be negative.
+[clinic start generated code]*/
+
+static PyObject *
+math_factorize(PyObject *module, PyObject *n)
+/*[clinic end generated code: output=77975bd66e53917a input=ccb83153f3d2cd56]*/
+{
+    int a_too_large, c_bit_length, shift;
+    size_t c, d, ndig;
+    uint64_t m, r, i;
+    uint32_t u;
+    digit *digits;
+    PyListObject *res;
+    PyObject *a, *b;
+
+    n = _PyNumber_Index(n);
+    if (n == NULL) {
+        return NULL;
+    }
+
+    if (_PyLong_IsZero((PyLongObject *)n)) {
+        Py_DECREF(n);
+        return PyList_New(0);
+    }
+
+    digits = ((PyLongObject *)n)->long_value.ob_digit;
+    ndig = _PyLong_DigitCount((PyLongObject *)n);
+    for (i = 0; i < ndig && !digits[i]; i++);
+    assert(i < ndig);
+    r = PyLong_SHIFT * i;
+#if (defined(__clang__) || defined(__GNUC__))
+    shift = __builtin_ctz(digits[i]);
+    r += shift;
+#elif defined(_MSC_VER)
+    Py_BUILD_ASSERT(sizeof(digit) <= 4);
+    if (_BitScanForward(&shift, digits[i])) {
+        r += shift;
+    }
+    else {
+        shift = 0;
+    }
+#else
+    {
+        digit x = digits[i];
+        for (shift = 0; (x & 1) == 0; shift++, x >>= 1);
+        r += shift;
+    }
+#endif
+
+    res = (PyListObject *)PyList_New(r);
+    if (res == NULL) {
+        return NULL;
+    }
+    if (r) {
+        a = PyLong_FromLong(2);
+        if (a == NULL) {
+            goto error;
+        }
+        PyList_SET_ITEM(res, 0, a);
+        _Py_RefcntAdd(a, r-1);
+        PyObject **dest = _PyList_ITEMS(res) + 1;
+        PyObject **dest_end = dest + (r-1);
+        while (dest < dest_end) {
+            *dest++ = a;
+        }
+    }
+
+    c = _PyLong_NumBits(n);
+    if (c == (size_t)(-1)) {
+        goto error;
+    }
+    c = (c - r - 1U) / 2U;
+
+    /* Fast path: if c <= 31 then n shifted < 2**64 and we can compute
+       directly with a fast algorithm. */
+    if (c <= 31U) {
+        m = digits[i] >> shift;
+        for (shift = -shift; ++i < ndig;) {
+            shift += PyLong_SHIFT;
+            m |= (uint64_t)digits[i] << shift;
+        }
+        for (i = 3; m != 1; i += 2) {
+            a = NULL;
+            while (m % i == 0) {
+                if (!a) {
+                    a = PyLong_FromUnsignedLongLong(i);
+                    if (a == NULL) {
+                        goto error;
+                    }
+                }
+                else {
+                    Py_INCREF(a);
+                }
+                if (_PyList_AppendTakeRef(res, a) < 0) {
+                    goto error;
+                }
+                m /= i;
+            }
+        }
+        if (_PyLong_IsNegative((PyLongObject *)n) && Py_SIZE(res)) {
+            PyObject *x = PyList_GET_ITEM(res, 0);
+            _PyLong_Negate((PyLongObject **)&x);
+            if (x == NULL) {
+                goto error;
+            }
+            PyList_SET_ITEM(res, 0, x);
+        }
+        Py_DECREF(n);
+        return (PyObject *)res;
+    }
+
+    /* Slow path: n shifted >= 2**64. We perform the first few iterations in
+       C integer arithmetic, then switch to using Python long integers. */
+
+    /* From n >= 2**64 it follows that c.bit_length() >= 6.
+    c_bit_length = 6;
+    while ((c >> c_bit_length) > 0U) {
+        ++c_bit_length;
+    }
+
+    Initialise d and a.
+    d = c >> (c_bit_length - 5);
+    b = _PyLong_Rshift(n, 2U*c - 62U);
+    if (b == NULL) {
+        goto error;
+    }
+    m = (uint64_t)PyLong_AsUnsignedLongLong(b);
+    Py_DECREF(b);
+    if (m == (uint64_t)(-1) && PyErr_Occurred()) {
+        goto error;
+    }
+    u = _approximate_isqrt(m) >> (31U - d);
+    a = PyLong_FromUnsignedLong(u);
+    if (a == NULL) {
+        goto error;
+    }
+
+    for (int s = c_bit_length - 6; s >= 0; --s) {
+        PyObject *q;
+        size_t e = d;
+
+        d = c >> s;
+
+        q = (n >> 2*c - e - d + 1) // a
+        q = _PyLong_Rshift(n, 2U*c - d - e + 1U);
+        if (q == NULL) {
+            goto error;
+        }
+        Py_SETREF(q, PyNumber_FloorDivide(q, a));
+        if (q == NULL) {
+            goto error;
+        }
+
+        a = (a << d - 1 - e) + q
+        Py_SETREF(a, _PyLong_Lshift(a, d - 1U - e));
+        if (a == NULL) {
+            Py_DECREF(q);
+            goto error;
+        }
+        Py_SETREF(a, PyNumber_Add(a, q));
+        Py_DECREF(q);
+        if (a == NULL) {
+            goto error;
+        }
+    }
+
+    The correct result is either a or a - 1. Figure out which, and
+       decrement a if necessary.
+
+    a_too_large = n < a * a
+    b = PyNumber_Multiply(a, a);
+    if (b == NULL) {
+        goto error;
+    }
+    a_too_large = PyObject_RichCompareBool(n, b, Py_LT);
+    Py_DECREF(b);
+    if (a_too_large == -1) {
+        goto error;
+    }
+
+    if (a_too_large) {
+        Py_SETREF(a, PyNumber_Subtract(a, _PyLong_GetOne()));
+    }
+    */
+    Py_DECREF(n);
+    return (PyObject *)res;
+
+  error:
+    Py_DECREF(res);
+    Py_DECREF(n);
+    return NULL;
+}
+
 static int
 math_exec(PyObject *module)
 {
@@ -4129,6 +4331,7 @@ static PyMethodDef math_methods[] = {
     MATH_COMB_METHODDEF
     MATH_NEXTAFTER_METHODDEF
     MATH_ULP_METHODDEF
+    MATH_FACTORIZE_METHODDEF
     {NULL,              NULL}           /* sentinel */
 };
 

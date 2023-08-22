@@ -950,4 +950,15 @@ math_ulp(PyObject *module, PyObject *arg)
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=91a0357265a2a553 input=a9049054013a1b77]*/
+
+PyDoc_STRVAR(math_factorize__doc__,
+"factorize($module, n, /)\n"
+"--\n"
+"\n"
+"Return the prime factorization of an integer in a list.\n"
+"\n"
+"If the integer is negative, the first term in the list will be negative.");
+
+#define MATH_FACTORIZE_METHODDEF    \
+    {"factorize", (PyCFunction)math_factorize, METH_O, math_factorize__doc__},
+/*[clinic end generated code: output=27bb0d83da5b552d input=a9049054013a1b77]*/

@@ -274,7 +274,7 @@ _PyLong_FromSTwoDigits(stwodigits x)
 
 /* If a freshly-allocated int is already shared, it must
    be a small integer, so negating it must go to PyLong_FromLong */
-Py_LOCAL_INLINE(void)
+void
 _PyLong_Negate(PyLongObject **x_p)
 {
     PyLongObject *x;

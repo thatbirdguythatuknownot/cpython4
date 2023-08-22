@@ -6286,17 +6286,6 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         ADD_YIELD_FROM(c, loc, 0);
         break;
     case Await_kind:
-        if (!IS_TOP_LEVEL_AWAIT(c)){
-            if (!_PyST_IsFunctionLike(c->u->u_ste)) {
-                return compiler_error(c, loc, "'await' outside function");
-            }
-
-            if (c->u->u_scope_type != COMPILER_SCOPE_ASYNC_FUNCTION &&
-                    c->u->u_scope_type != COMPILER_SCOPE_COMPREHENSION) {
-                return compiler_error(c, loc, "'await' outside async function");
-            }
-        }
-
         VISIT(c, expr, e->v.Await.value);
         ADDOP_I(c, loc, GET_AWAITABLE, 0);
         ADDOP_LOAD_CONST(c, loc, Py_None);

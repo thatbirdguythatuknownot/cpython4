@@ -456,6 +456,8 @@ finally_block[asdl_stmt_seq*]:
 match_stmt[stmt_ty]:
     | "match" subject=subject_expr ':' NEWLINE INDENT cases[asdl_match_case_seq*]=case_block+ DEDENT {
         CHECK_VERSION(stmt_ty, 10, "Pattern matching is", _PyAST_Match(subject, cases, EXTRA)) }
+    | "match" subject=subject_expr ':' NEWLINE cases[asdl_match_case_seq*]=case_block+ {
+        CHECK_VERSION(stmt_ty, 10, "Pattern matching is", _PyAST_Match(subject, cases, EXTRA)) }
     | invalid_match_stmt
 
 subject_expr[expr_ty]:

@@ -4021,6 +4021,31 @@ math_ulp_impl(PyObject *module, double x)
     return x2 - x;
 }
 
+/* For prime factorization. */
+static uint64_t skip[] = {4, 2, 4, 2, 4, 6, 2, 6};
+
+Py_LOCAL_INLINE(int)
+factor_algo_small(PyListObject *res, uint64_t *m, uint64_t i)
+{
+    PyObject *a = NULL;
+    while (*m % i == 0) {
+        if (!a) {
+            a = PyLong_FromUnsignedLongLong(i);
+            if (a == NULL) {
+                return 1;
+            }
+        }
+        else {
+            Py_INCREF(a);
+        }
+        if (_PyList_AppendTakeRef(res, a) < 0) {
+            return 1;
+        }
+        *m /= i;
+    }
+    return 0;
+}
+
 /*[clinic input]
 math.factorize
 
@@ -4105,27 +4130,30 @@ math_factorize(PyObject *module, PyObject *n)
     /* Fast path: if c <= 31 then n shifted < 2**64 and we can compute
        directly with a fast algorithm. */
     if (c <= 31U) {
+        int j;
         m = digits[i] >> shift;
         for (shift = -shift; ++i < ndig;) {
             shift += PyLong_SHIFT;
             m |= (uint64_t)digits[i] << shift;
         }
-        for (i = 3; m != 1; i += 2) {
-            a = NULL;
-            while (m % i == 0) {
-                if (!a) {
-                    a = PyLong_FromUnsignedLongLong(i);
-                    if (a == NULL) {
-                        goto error;
-                    }
-                }
-                else {
-                    Py_INCREF(a);
-                }
-                if (_PyList_AppendTakeRef(res, a) < 0) {
-                    goto error;
-                }
-                m /= i;
+        if (factor_algo_small(res, &m, 3)) {
+            goto error;
+        }
+        if (factor_algo_small(res, &m, 5)) {
+            goto error;
+        }
+        for (i = 7, j = 0; m != 1 && i*i <= m; i += skip[j = (j + 1) % 8]) {
+            if (factor_algo_small(res, &m, i)) {
+                goto error;
+            }
+        }
+        if (m != 1) {
+            a = PyLong_FromUnsignedLongLong(m);
+            if (a == NULL) {
+                goto error;
+            }
+            if (_PyList_AppendTakeRef(res, a) < 0) {
+                goto error;
             }
         }
         if (_PyLong_IsNegative((PyLongObject *)n) && Py_SIZE(res)) {

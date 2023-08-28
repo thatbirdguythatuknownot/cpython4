@@ -32,13 +32,15 @@ from enum import IntEnum, auto, _simple_enum
 
 
 def parse(source, filename='<unknown>', mode='exec', *,
-          type_comments=False, feature_version=None):
+          type_comments=False, feature_version=None, optimize=-1):
     """
     Parse the source into an AST node.
     Equivalent to compile(source, filename, mode, PyCF_ONLY_AST).
     Pass type_comments=True to get back type comments where the syntax allows.
     """
     flags = PyCF_ONLY_AST
+    if optimize > 0:
+        flags |= PyCF_OPTIMIZED_AST
     if type_comments:
         flags |= PyCF_TYPE_COMMENTS
     if feature_version is None:
@@ -50,7 +52,7 @@ def parse(source, filename='<unknown>', mode='exec', *,
         feature_version = minor
     # Else it should be an int giving the minor version for 3.x.
     return compile(source, filename, mode, flags,
-                   _feature_version=feature_version)
+                   _feature_version=feature_version, optimize=optimize)
 
 
 def literal_eval(node_or_string):
@@ -699,7 +701,8 @@ class _Precedence:
     CMP = auto()             # '<', '>', '==', '>=', '<=', '!=',
                              # 'in', 'not in', 'is', 'is not'
     EXPR = auto()
-    BOR = EXPR               # '|'
+    COMP = EXPR              # '|>'
+    BOR = auto()             # '|'
     BXOR = auto()            # '^'
     BAND = auto()            # '&'
     SHIFT = auto()           # '<<', '>>'
@@ -1326,12 +1329,21 @@ class _Unparser(NodeVisitor):
                 self.write("u")
             self._write_constant(node.value)
 
+    def visit_Template(self, node):
+        self.write("$")
+
     def visit_List(self, node):
         with self.delimit("[", "]"):
             self.interleave(lambda: self.write(", "), self.traverse, node.elts)
 
     def visit_ListComp(self, node):
         with self.delimit("[", "]"):
+            self.traverse(node.elt)
+            for gen in node.generators:
+                self.traverse(gen)
+
+    def visit_TupleComp(self, node):
+        with self.delimit("(", ",)"):
             self.traverse(node.elt)
             for gen in node.generators:
                 self.traverse(gen)
@@ -1357,15 +1369,27 @@ class _Unparser(NodeVisitor):
                 self.traverse(gen)
 
     def visit_comprehension(self, node):
+        use_where = False
         if node.is_async:
             self.write(" async for ")
         else:
-            self.write(" for ")
+            if hasattr(node.iter, "elts") and len(node.iter.elts) == 1:
+                use_where = True
+                self.write(" where ")
+            else:
+                self.write(" for ")
         self.set_precedence(_Precedence.TUPLE, node.target)
         self.traverse(node.target)
-        self.write(" in ")
-        self.set_precedence(_Precedence.TEST.next(), node.iter, *node.ifs)
-        self.traverse(node.iter)
+        if use_where:
+            self.write(" = ")
+        else:
+            self.write(" in ")
+        if use_where:
+            it = node.iter.elts[0]
+        else:
+            it = node.iter
+        self.set_precedence(_Precedence.TEST.next(), it, *node.ifs)
+        self.traverse(it)
         for if_clause in node.ifs:
             self.write(" if ")
             self.traverse(if_clause)
@@ -1489,6 +1513,14 @@ class _Unparser(NodeVisitor):
             self.set_precedence(right_precedence, node.right)
             self.traverse(node.right)
 
+    def visit_Composition(self, node):
+        with self.require_parens(_Precedence.COMP, node):
+            self.set_precedence(_Precedence.COMP, node.arg)
+            self.traverse(node.arg)
+            self.write(" |> ")
+            self.set_precedence(_Precedence.COMP.next(), node.func)
+            self.traverse(node.func)
+
     cmpops = {
         "Eq": "==",
         "NotEq": "!=",
@@ -1500,6 +1532,8 @@ class _Unparser(NodeVisitor):
         "IsNot": "is not",
         "In": "in",
         "NotIn": "not in",
+        "IsIn": "is in",
+        "IsNotIn": "is not in",
     }
 
     def visit_Compare(self, node):
@@ -1570,6 +1604,7 @@ class _Unparser(NodeVisitor):
                 # parentheses can be omitted if the tuple isn't empty
                 self.items_view(self.traverse, node.slice.elts)
             else:
+                self.set_precedence(_Precedence.NAMED_EXPR, node.slice)
                 self.traverse(node.slice)
 
     def visit_Starred(self, node):
@@ -1581,14 +1616,15 @@ class _Unparser(NodeVisitor):
         self.write("...")
 
     def visit_Slice(self, node):
-        if node.lower:
-            self.traverse(node.lower)
-        self.write(":")
-        if node.upper:
-            self.traverse(node.upper)
-        if node.step:
+        with self.require_parens(_Precedence.NAMED_EXPR, node):
+            if node.lower:
+                self.traverse(node.lower)
             self.write(":")
-            self.traverse(node.step)
+            if node.upper:
+                self.traverse(node.upper)
+            if node.step:
+                self.write(":")
+                self.traverse(node.step)
 
     def visit_Match(self, node):
         self.fill("match ")

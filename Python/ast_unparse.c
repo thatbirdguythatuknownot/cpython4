@@ -29,7 +29,7 @@ append_joinedstr(_PyUnicodeWriter *writer, expr_ty e, bool is_format_spec);
 static int
 append_formattedvalue(_PyUnicodeWriter *writer, expr_ty e);
 static int
-append_ast_slice(_PyUnicodeWriter *writer, expr_ty e);
+append_ast_slice(_PyUnicodeWriter *writer, expr_ty e, int level);
 
 static int
 append_charp(_PyUnicodeWriter *writer, const char *charp)
@@ -103,6 +103,7 @@ append_repr(_PyUnicodeWriter *writer, PyObject *obj)
 /* Priority levels */
 
 enum {
+    PR_NAMED_EXPR,
     PR_TUPLE,
     PR_TEST,            /* 'if'-'else', 'lambda' */
     PR_OR,              /* 'or' */
@@ -111,7 +112,8 @@ enum {
     PR_CMP,             /* '<', '>', '==', '>=', '<=', '!=',
                            'in', 'not in', 'is', 'is not' */
     PR_EXPR,
-    PR_BOR = PR_EXPR,   /* '|' */
+    PR_COMP = PR_EXPR,  /* '|>' */
+    PR_BOR,             /* '|' */
     PR_BXOR,            /* '^' */
     PR_BAND,            /* '&' */
     PR_SHIFT,           /* '<<', '>>' */
@@ -177,6 +179,17 @@ append_ast_binop(_PyUnicodeWriter *writer, expr_ty e, int level)
     APPEND_STR(op);
     APPEND_EXPR(e->v.BinOp.right, pr + !rassoc);
     APPEND_STR_IF(level > pr, ")");
+    return 0;
+}
+
+static int
+append_ast_composition(_PyUnicodeWriter *writer, expr_ty e, int level)
+{
+    APPEND_STR_IF(level > PR_COMP, "(");
+    APPEND_EXPR(e->v.BinOp.left, PR_COMP);
+    APPEND_STR(" |> ");
+    APPEND_EXPR(e->v.BinOp.right, PR_COMP + 1);
+    APPEND_STR_IF(level > PR_COMP, ")");
     return 0;
 }
 
@@ -393,11 +406,28 @@ static int
 append_ast_comprehension(_PyUnicodeWriter *writer, comprehension_ty gen)
 {
     Py_ssize_t i, if_count;
+    int use_where = 0;
 
-    APPEND_STR(gen->is_async ? " async for " : " for ");
+    if (gen->is_async) {
+        APPEND_STR(" async for ");
+    }
+    else if ((gen->iter->kind == List_kind ||
+              gen->iter->kind == Tuple_kind) &&
+             asdl_seq_LEN(gen->iter->v.List.elts) == 1)
+    {
+        use_where = 1;
+        APPEND_STR(" where ");
+    }
+    else {
+        APPEND_STR(" for ");
+    }
     APPEND_EXPR(gen->target, PR_TUPLE);
-    APPEND_STR(" in ");
-    APPEND_EXPR(gen->iter, PR_TEST + 1);
+    APPEND_STR(use_where ? " = " : " in ");
+    
+    APPEND_EXPR(use_where ?
+                    asdl_seq_GET(gen->iter->v.List.elts, 0) :
+                    gen->iter,
+                PR_TEST + 1);
 
     if_count = asdl_seq_LEN(gen->ifs);
     for (i = 0; i < if_count; i++) {
@@ -436,6 +466,15 @@ append_ast_listcomp(_PyUnicodeWriter *writer, expr_ty e)
     APPEND_EXPR(e->v.ListComp.elt, PR_TEST);
     APPEND(comprehensions, e->v.ListComp.generators);
     APPEND_STR_FINISH("]");
+}
+
+static int
+append_ast_tuplecomp(_PyUnicodeWriter *writer, expr_ty e)
+{
+    APPEND_STR("(");
+    APPEND_EXPR(e->v.ListComp.elt, PR_TEST);
+    APPEND(comprehensions, e->v.ListComp.generators);
+    APPEND_STR_FINISH(",)");
 }
 
 static int
@@ -768,8 +807,10 @@ append_ast_attribute(_PyUnicodeWriter *writer, expr_ty e)
 }
 
 static int
-append_ast_slice(_PyUnicodeWriter *writer, expr_ty e)
+append_ast_slice(_PyUnicodeWriter *writer, expr_ty e, int level)
 {
+    APPEND_STR_IF(level > PR_NAMED_EXPR, "(");
+
     if (e->v.Slice.lower) {
         APPEND_EXPR(e->v.Slice.lower, PR_TEST);
     }
@@ -784,6 +825,8 @@ append_ast_slice(_PyUnicodeWriter *writer, expr_ty e)
         APPEND_STR(":");
         APPEND_EXPR(e->v.Slice.step, PR_TEST);
     }
+
+    APPEND_STR_IF(level > PR_NAMED_EXPR, ")");
     return 0;
 }
 
@@ -792,7 +835,11 @@ append_ast_subscript(_PyUnicodeWriter *writer, expr_ty e)
 {
     APPEND_EXPR(e->v.Subscript.value, PR_ATOM);
     APPEND_STR("[");
-    APPEND_EXPR(e->v.Subscript.slice, PR_TUPLE);
+    APPEND_EXPR(e->v.Subscript.slice,
+                (e->v.Subscript.slice->kind == Slice_kind ||
+                 e->v.Subscript.slice->kind == NamedExpr_kind) ?
+                PR_NAMED_EXPR :
+                PR_TUPLE);
     APPEND_STR_FINISH("]");
 }
 
@@ -867,6 +914,8 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
         return append_ast_genexp(writer, e);
     case ListComp_kind:
         return append_ast_listcomp(writer, e);
+    case TupleComp_kind:
+        return append_ast_tuplecomp(writer, e);
     case SetComp_kind:
         return append_ast_setcomp(writer, e);
     case DictComp_kind:
@@ -902,7 +951,7 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
     case Starred_kind:
         return append_ast_starred(writer, e);
     case Slice_kind:
-        return append_ast_slice(writer, e);
+        return append_ast_slice(writer, e, level);
     case Name_kind:
         return _PyUnicodeWriter_WriteStr(writer, e->v.Name.id);
     case List_kind:
@@ -911,6 +960,10 @@ append_ast_expr(_PyUnicodeWriter *writer, expr_ty e, int level)
         return append_ast_tuple(writer, e, level);
     case NamedExpr_kind:
         return append_named_expr(writer, e, level);
+    case Composition_kind:
+        return append_ast_composition(writer, e, level);
+    case Template_kind:
+        APPEND_STR_FINISH("$");
     // No default so compiler emits a warning for unhandled cases
     }
     PyErr_SetString(PyExc_SystemError,

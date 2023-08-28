@@ -1816,6 +1816,12 @@ Py_CompileStringObject(const char *str, PyObject *filename, int start,
         return NULL;
     }
     if (flags && (flags->cf_flags & PyCF_ONLY_AST)) {
+        if ((flags->cf_flags & PyCF_OPTIMIZED_AST) == PyCF_OPTIMIZED_AST) {
+            if (_PyCompile_AstOptimize(mod, filename, flags, optimize, arena) < 0) {
+                _PyArena_Free(arena);
+                return NULL;
+            }
+        }
         PyObject *result = PyAST_mod2obj(mod);
         _PyArena_Free(arena);
         return result;

@@ -92,13 +92,9 @@ class State:
         return gid
     def closegroup(self, gid, p):
         self.groupwidths[gid] = p.getwidth()
-    def checkgroup(self, gid):
-        return gid < self.groups and self.groupwidths[gid] is not None
 
     def checklookbehindgroup(self, gid, source):
         if self.lookbehindgroups is not None:
-            if not self.checkgroup(gid):
-                raise source.error('cannot refer to an open group')
             if gid >= self.lookbehindgroups:
                 raise source.error('cannot refer to group defined in the same '
                                    'lookbehind subpattern')
@@ -426,9 +422,6 @@ def _escape(source, escape, state):
             # not an octal escape, so this is a group reference
             group = int(escape[1:])
             if group < state.groups:
-                if 0: #not state.checkgroup(group):
-                    raise source.error("cannot refer to an open group",
-                                       len(escape))
                 state.checklookbehindgroup(group, source)
                 return GROUPREF, group
             raise source.error("invalid group reference %d" % group, len(escape) - 1)
@@ -726,9 +719,6 @@ def _parse(source, state, verbose, nested, first=False):
                         if gid is None:
                             msg = "unknown group name %r" % name
                             raise source.error(msg, len(name) + 1)
-                        if not state.checkgroup(gid):
-                            raise source.error("cannot refer to an open group",
-                                               len(name) + 1)
                         state.checklookbehindgroup(gid, source)
                         subpatternappend((GROUPREF, gid))
                         continue

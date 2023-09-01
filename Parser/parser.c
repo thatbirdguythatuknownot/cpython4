@@ -15563,7 +15563,7 @@ atom_rule(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = p -> subn > 0 ? _PyAST_Template ( EXTRA ) : RAISE_SYNTAX_ERROR_KNOWN_LOCATION ( a , "template not in righthand side of pipe operation" );
+            _res = p -> subn > 0 ? _PyAST_Template ( 0 , EXTRA ) : RAISE_SYNTAX_ERROR_KNOWN_LOCATION ( a , "template not in righthand side of pipe operation" );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;

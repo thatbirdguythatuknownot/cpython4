@@ -691,17 +691,17 @@ fold_compare(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
     } \
 }
 
-static int fold_comp_compinternal(comprehension_ty, int *, expr_ty,
+static int fold_comp_compinternal(comprehension_ty, expr_ty *, expr_ty,
                                   _PyASTOptimizeState *);
-static int fold_comp_keywordinternal(keyword_ty, int *, expr_ty,
+static int fold_comp_keywordinternal(keyword_ty, expr_ty *, expr_ty,
                                      _PyASTOptimizeState *);
-static int fold_comp_argumentsinternal(arguments_ty, int *, expr_ty,
+static int fold_comp_argumentsinternal(arguments_ty, expr_ty *, expr_ty,
                                        _PyASTOptimizeState *);
-static int fold_comp_arginternal(arg_ty, int *, expr_ty,
+static int fold_comp_arginternal(arg_ty, expr_ty *, expr_ty,
                                  _PyASTOptimizeState *);
 
 static int
-fold_comp_internal(expr_ty node_, int *ptr, expr_ty sub,
+fold_comp_internal(expr_ty node_, expr_ty *ptr, expr_ty sub,
                    _PyASTOptimizeState *state)
 {
     switch (node_->kind) {
@@ -814,7 +814,7 @@ fold_comp_internal(expr_ty node_, int *ptr, expr_ty sub,
         if (sub) {
             COPY_NODE(node_, sub);
         }
-        *ptr = 1;
+        *ptr = node_;
         break;
     case Composition_kind:
     case Name_kind:
@@ -826,7 +826,7 @@ fold_comp_internal(expr_ty node_, int *ptr, expr_ty sub,
 }
 
 static int
-fold_comp_compinternal(comprehension_ty node_, int *ptr, expr_ty sub,
+fold_comp_compinternal(comprehension_ty node_, expr_ty *ptr, expr_ty sub,
                        _PyASTOptimizeState *state)
 {
     CALL(node_->target);
@@ -836,7 +836,7 @@ fold_comp_compinternal(comprehension_ty node_, int *ptr, expr_ty sub,
 }
 
 static int
-fold_comp_keywordinternal(keyword_ty node_, int *ptr, expr_ty sub,
+fold_comp_keywordinternal(keyword_ty node_, expr_ty *ptr, expr_ty sub,
                           _PyASTOptimizeState *state)
 {
     CALL(node_->value);
@@ -844,7 +844,7 @@ fold_comp_keywordinternal(keyword_ty node_, int *ptr, expr_ty sub,
 }
 
 static int
-fold_comp_argumentsinternal(arguments_ty node_, int *ptr, expr_ty sub,
+fold_comp_argumentsinternal(arguments_ty node_, expr_ty *ptr, expr_ty sub,
                             _PyASTOptimizeState *state)
 {
     CALL_SEQ(fold_comp_arginternal, arg, node_->posonlyargs);
@@ -862,7 +862,7 @@ fold_comp_argumentsinternal(arguments_ty node_, int *ptr, expr_ty sub,
 }
 
 static int
-fold_comp_arginternal(arg_ty node_, int *ptr, expr_ty sub,
+fold_comp_arginternal(arg_ty node_, expr_ty *ptr, expr_ty sub,
                       _PyASTOptimizeState *state)
 {
     if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
@@ -878,7 +878,8 @@ fold_comp(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 {
     expr_ty arg;
     expr_ty func;
-    int ptr = 0, constant = 1;
+    expr_ty ptr = NULL;
+    int constant = 1;
 
     arg = node->v.Composition.arg;
     if (arg->kind != Constant_kind) {
@@ -902,9 +903,12 @@ fold_comp(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
         node->v.Call.args = seq;
         node->v.Call.keywords = NULL;
     }
-    else if (constant) {
-        COPY_NODE(node, func);
-        return astfold_expr(node, arena, state); /* second pass */
+    else {
+        if (constant) {
+            COPY_NODE(node, func);
+            return astfold_expr(node, arena, state); /* second pass */
+        }
+        ptr->v.Template.last = 1;
     }
 
     return 1;

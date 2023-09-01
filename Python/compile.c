@@ -6219,15 +6219,13 @@ compiler_composition(struct compiler *c, expr_ty e)
     ADDOP(c, loc, PIPEARG_MARKER); /* for the stack size calculation later */
     VISIT(c, expr, e->v.Composition.func);
     ADDOP(c, loc, PIPEARG_ENDMARKER);
-    ADDOP_I(c, loc, SWAP, 2); /* swap arg and result of func */
-    ADDOP(c, loc, POP_TOP); /* pop arg */
     return SUCCESS;
 }
 
 static int
 compiler_template(struct compiler *c, expr_ty e)
 {
-    ADDOP_I(c, LOC(e), COPY, -1);
+    ADDOP_I(c, LOC(e), COPY, ~e->v.Template.last);
     return SUCCESS;
 }
 

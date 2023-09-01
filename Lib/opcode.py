@@ -159,6 +159,8 @@ def_op('BUILD_CONST_KEY_MAP', 156)
 def_op('BUILD_STRING', 157)
 def_op('CONVERT_VALUE', 158)
 
+def_op('SWAP_N', 159)
+
 def_op('LIST_EXTEND', 162)
 def_op('SET_UPDATE', 163)
 def_op('DICT_MERGE', 164)

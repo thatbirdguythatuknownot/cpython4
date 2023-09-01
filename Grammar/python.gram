@@ -869,7 +869,7 @@ atom[expr_ty]:
     | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) }
     | a='$' {
         p->subn > 0 ?
-        _PyAST_Template(EXTRA) :
+        _PyAST_Template(0, EXTRA) :
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
     | &(STRING|FSTRING_START) strings
     | NUMBER

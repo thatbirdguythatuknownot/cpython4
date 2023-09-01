@@ -221,6 +221,7 @@ struct ast_state {
     PyObject *kwd_attrs;
     PyObject *kwd_patterns;
     PyObject *kwonlyargs;
+    PyObject *last;
     PyObject *left;
     PyObject *level;
     PyObject *lineno;

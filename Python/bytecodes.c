@@ -3674,6 +3674,13 @@ dummy_func(
             assert(oparg >= 2);
         }
 
+        inst(SWAP_N, (bottom, unused[oparg-1] --
+                      unused[oparg-1], bottom)) {
+            assert(oparg >= 2);
+            memmove(&PEEK(oparg), &PEEK(oparg - 1),
+                    sizeof(PyObject*) * (oparg - 1));
+        }
+
         inst(INSTRUMENTED_INSTRUCTION, ( -- )) {
             int next_opcode = _Py_call_instrumentation_instruction(
                 tstate, frame, next_instr-1);

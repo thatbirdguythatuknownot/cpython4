@@ -233,6 +233,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->kwd_attrs);
     Py_CLEAR(state->kwd_patterns);
     Py_CLEAR(state->kwonlyargs);
+    Py_CLEAR(state->last);
     Py_CLEAR(state->left);
     Py_CLEAR(state->level);
     Py_CLEAR(state->lineno);
@@ -340,6 +341,7 @@ static int init_identifiers(struct ast_state *state)
     if ((state->kwd_attrs = PyUnicode_InternFromString("kwd_attrs")) == NULL) return 0;
     if ((state->kwd_patterns = PyUnicode_InternFromString("kwd_patterns")) == NULL) return 0;
     if ((state->kwonlyargs = PyUnicode_InternFromString("kwonlyargs")) == NULL) return 0;
+    if ((state->last = PyUnicode_InternFromString("last")) == NULL) return 0;
     if ((state->left = PyUnicode_InternFromString("left")) == NULL) return 0;
     if ((state->level = PyUnicode_InternFromString("level")) == NULL) return 0;
     if ((state->lineno = PyUnicode_InternFromString("lineno")) == NULL) return 0;
@@ -644,6 +646,9 @@ static const char * const JoinedStr_fields[]={
 static const char * const Constant_fields[]={
     "value",
     "kind",
+};
+static const char * const Template_fields[]={
+    "last",
 };
 static const char * const Attribute_fields[]={
     "value",
@@ -1406,7 +1411,7 @@ init_types(struct ast_state *state)
         "     | FormattedValue(expr value, int conversion, expr? format_spec)\n"
         "     | JoinedStr(expr* values)\n"
         "     | Constant(constant value, string? kind)\n"
-        "     | Template\n"
+        "     | Template(int last)\n"
         "     | Attribute(expr value, identifier attr, expr_context ctx)\n"
         "     | Subscript(expr value, expr slice, expr_context ctx)\n"
         "     | Starred(expr value, expr_context ctx)\n"
@@ -1517,9 +1522,9 @@ init_types(struct ast_state *state)
     if (!state->Constant_type) return 0;
     if (PyObject_SetAttr(state->Constant_type, state->kind, Py_None) == -1)
         return 0;
-    state->Template_type = make_type(state, "Template", state->expr_type, NULL,
-                                     0,
-        "Template");
+    state->Template_type = make_type(state, "Template", state->expr_type,
+                                     Template_fields, 1,
+        "Template(int last)");
     if (!state->Template_type) return 0;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
                                       Attribute_fields, 3,
@@ -3323,14 +3328,15 @@ _PyAST_Constant(constant value, string kind, int lineno, int col_offset, int
 }
 
 expr_ty
-_PyAST_Template(int lineno, int col_offset, int end_lineno, int end_col_offset,
-                PyArena *arena)
+_PyAST_Template(int last, int lineno, int col_offset, int end_lineno, int
+                end_col_offset, PyArena *arena)
 {
     expr_ty p;
     p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
     if (!p)
         return NULL;
     p->kind = Template_kind;
+    p->v.Template.last = last;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -5015,6 +5021,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         tp = (PyTypeObject *)state->Template_type;
         result = PyType_GenericNew(tp, NULL, NULL);
         if (!result) goto failed;
+        value = ast2obj_int(state, o->v.Template.last);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->last, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         break;
     case Attribute_kind:
         tp = (PyTypeObject *)state->Attribute_type;
@@ -10411,9 +10422,27 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         return 1;
     }
     if (isinstance) {
+        int last;
 
-        *out = _PyAST_Template(lineno, col_offset, end_lineno, end_col_offset,
-                               arena);
+        if (PyObject_GetOptionalAttr(obj, state->last, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"last\" missing from Template");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Template' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &last, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Template(last, lineno, col_offset, end_lineno,
+                               end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }

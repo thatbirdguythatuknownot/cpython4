@@ -2706,6 +2706,16 @@
             break;
         }
 
+        case SWAP_N: {
+            PyObject *bottom;
+            bottom = stack_pointer[-1 - (oparg-1)];
+            assert(oparg >= 2);
+            memmove(&PEEK(oparg), &PEEK(oparg - 1),
+                    sizeof(PyObject*) * (oparg - 1));
+            stack_pointer[-1] = bottom;
+            break;
+        }
+
         case _POP_JUMP_IF_FALSE: {
             PyObject *flag;
             flag = stack_pointer[-1];

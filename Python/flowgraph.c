@@ -771,7 +771,10 @@ calculate_stackdepth(cfg_builder *g)
                 instr->i_opcode = NOP;
                 continue;
             }
-            else if (instr->i_opcode == COPY && instr->i_oparg == -1) {
+            else if (instr->i_opcode == COPY && instr->i_oparg < 0) {
+                if (instr->i_oparg == -2) {
+                    instr->i_opcode = SWAP_N;
+                }
                 instr->i_oparg =
                     depth - b->b_template_subs[b->b_nsubs - 1] + 1;
             }

@@ -4768,6 +4768,16 @@
             DISPATCH();
         }
 
+        TARGET(SWAP_N) {
+            PyObject *bottom;
+            bottom = stack_pointer[-1 - (oparg-1)];
+            assert(oparg >= 2);
+            memmove(&PEEK(oparg), &PEEK(oparg - 1),
+                    sizeof(PyObject*) * (oparg - 1));
+            stack_pointer[-1] = bottom;
+            DISPATCH();
+        }
+
         TARGET(INSTRUMENTED_INSTRUCTION) {
             int next_opcode = _Py_call_instrumentation_instruction(
                 tstate, frame, next_instr-1);

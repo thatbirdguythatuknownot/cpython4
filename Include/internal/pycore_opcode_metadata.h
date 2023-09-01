@@ -486,6 +486,8 @@ _PyOpcode_num_popped(int opcode, int oparg, bool jump) {
             return 2;
         case SWAP:
             return (oparg-2) + 2;
+        case SWAP_N:
+            return (oparg-1) + 1;
         case INSTRUMENTED_INSTRUCTION:
             return 0;
         case INSTRUMENTED_JUMP_FORWARD:
@@ -940,6 +942,8 @@ _PyOpcode_num_pushed(int opcode, int oparg, bool jump) {
             return 1;
         case SWAP:
             return (oparg-2) + 2;
+        case SWAP_N:
+            return (oparg-1) + 1;
         case INSTRUMENTED_INSTRUCTION:
             return 0;
         case INSTRUMENTED_JUMP_FORWARD:
@@ -1239,6 +1243,7 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[OPCODE_METADATA_SIZE] = {
     [COPY] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [BINARY_OP] = { true, INSTR_FMT_IBC, HAS_ARG_FLAG },
     [SWAP] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
+    [SWAP_N] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [INSTRUMENTED_INSTRUCTION] = { true, INSTR_FMT_IX, 0 },
     [INSTRUMENTED_JUMP_FORWARD] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [INSTRUMENTED_JUMP_BACKWARD] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
@@ -1379,6 +1384,7 @@ const struct opcode_macro_expansion _PyOpcode_macro_expansion[OPCODE_MACRO_EXPAN
     [COPY] = { .nuops = 1, .uops = { { COPY, 0, 0 } } },
     [BINARY_OP] = { .nuops = 1, .uops = { { BINARY_OP, 0, 0 } } },
     [SWAP] = { .nuops = 1, .uops = { { SWAP, 0, 0 } } },
+    [SWAP_N] = { .nuops = 1, .uops = { { SWAP_N, 0, 0 } } },
 };
 const char * const _PyOpcode_uop_name[OPCODE_UOP_NAME_SIZE] = {
     [EXIT_TRACE] = "EXIT_TRACE",

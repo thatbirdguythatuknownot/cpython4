@@ -1883,12 +1883,12 @@ tok_get_normal_mode(struct tok_state *tok, tokenizer_mode* current_tok, struct t
                     tok->pendin--;
                     tok->indent--;
                 }
-                if (col != tok->indstack[tok->indent]) {
+                if (col != tok->indstack[tok->indent] && tok->indstack[tok->indent] != -1) {
                     tok->done = E_DEDENT;
                     tok->cur = tok->inp;
                     return MAKE_TOKEN(ERRORTOKEN);
                 }
-                if (altcol != tok->altindstack[tok->indent]) {
+                if (altcol != tok->altindstack[tok->indent] && tok->altindstack[tok->indent] != -1) {
                     return MAKE_TOKEN(indenterror(tok));
                 }
             }

@@ -201,9 +201,11 @@ class SubPattern:
                 lo = lo + 1
                 hi = hi + 1
             elif op is GROUPREF:
-                i, j = self.state.groupwidths[av]
-                lo = lo + i
-                hi = hi + j
+                t = self.state.groupwidths[av]
+                if t:
+                    i, j = t
+                    lo = lo + i
+                    hi = hi + j
             elif op is GROUPREF_EXISTS:
                 i, j = av[1].getwidth()
                 if av[2] is not None:
@@ -424,7 +426,7 @@ def _escape(source, escape, state):
             # not an octal escape, so this is a group reference
             group = int(escape[1:])
             if group < state.groups:
-                if not state.checkgroup(group):
+                if 0: #not state.checkgroup(group):
                     raise source.error("cannot refer to an open group",
                                        len(escape))
                 state.checklookbehindgroup(group, source)

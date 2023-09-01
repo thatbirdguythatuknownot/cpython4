@@ -337,6 +337,7 @@ int _PyPegen_check_barry_as_flufl(Parser *, Token *);
 int _PyPegen_check_legacy_stmt(Parser *p, expr_ty t);
 int _PyPegen_add_restricted(Parser *p, Token *t);
 int _PyPegen_check_restricted(Parser *p, int type);
+void _PyPegen_
 ResultTokenWithMetadata *_PyPegen_check_fstring_conversion(Parser *p, Token *, expr_ty t);
 ResultTokenWithMetadata *_PyPegen_setup_full_format_spec(Parser *, Token *, asdl_expr_seq *, int, int,
                                                          int, int, PyArena *);

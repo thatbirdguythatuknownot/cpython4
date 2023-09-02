@@ -5885,7 +5885,7 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
 
     if (type != COMP_GENEXP) {
         if (type == COMP_TUPLECOMP) {
-            ADDOP(c, LOC(e), LIST_TO_TUPLE);
+            ADDOP_I(c, LOC(e), CALL_INTRINSIC_1, INTRINSIC_LIST_TO_TUPLE);
         }
         ADDOP(c, LOC(e), RETURN_VALUE);
     }

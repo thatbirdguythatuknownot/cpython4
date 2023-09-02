@@ -158,8 +158,6 @@ _PyOpcode_num_popped(int opcode, int oparg, bool jump) {
             return (oparg-1) + 2;
         case SET_ADD:
             return (oparg-1) + 2;
-        case LIST_TO_TUPLE:
-            return 1;
         case STORE_SUBSCR:
             return 3;
         case STORE_SUBSCR_LIST_INT:
@@ -614,8 +612,6 @@ _PyOpcode_num_pushed(int opcode, int oparg, bool jump) {
             return (oparg-1) + 1;
         case SET_ADD:
             return (oparg-1) + 1;
-        case LIST_TO_TUPLE:
-            return 1;
         case STORE_SUBSCR:
             return 0;
         case STORE_SUBSCR_LIST_INT:
@@ -1079,7 +1075,6 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[OPCODE_METADATA_SIZE] = {
     [BINARY_SUBSCR_GETITEM] = { true, INSTR_FMT_IXC, 0 },
     [LIST_APPEND] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [SET_ADD] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
-    [LIST_TO_TUPLE] = { true, INSTR_FMT_IX, 0 },
     [STORE_SUBSCR] = { true, INSTR_FMT_IXC, 0 },
     [STORE_SUBSCR_LIST_INT] = { true, INSTR_FMT_IXC, 0 },
     [STORE_SUBSCR_DICT] = { true, INSTR_FMT_IXC, 0 },
@@ -1295,7 +1290,6 @@ const struct opcode_macro_expansion _PyOpcode_macro_expansion[OPCODE_MACRO_EXPAN
     [BINARY_SUBSCR_DICT] = { .nuops = 1, .uops = { { BINARY_SUBSCR_DICT, 0, 0 } } },
     [LIST_APPEND] = { .nuops = 1, .uops = { { LIST_APPEND, 0, 0 } } },
     [SET_ADD] = { .nuops = 1, .uops = { { SET_ADD, 0, 0 } } },
-    [LIST_TO_TUPLE] = { .nuops = 1, .uops = { { LIST_TO_TUPLE, 0, 0 } } },
     [STORE_SUBSCR] = { .nuops = 1, .uops = { { STORE_SUBSCR, 0, 0 } } },
     [STORE_SUBSCR_LIST_INT] = { .nuops = 1, .uops = { { STORE_SUBSCR_LIST_INT, 0, 0 } } },
     [STORE_SUBSCR_DICT] = { .nuops = 1, .uops = { { STORE_SUBSCR_DICT, 0, 0 } } },

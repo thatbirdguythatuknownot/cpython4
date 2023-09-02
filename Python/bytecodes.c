@@ -656,12 +656,6 @@ dummy_func(
             ERROR_IF(err, error);
         }
 
-        inst(LIST_TO_TUPLE, (list -- res)) {
-            res = _PyTuple_FromArray(_PyList_ITEMS(list), PyList_GET_SIZE(list));
-            DECREF_INPUTS();
-            ERROR_IF(res == NULL, error);
-        }
-
         family(STORE_SUBSCR, INLINE_CACHE_ENTRIES_STORE_SUBSCR) = {
             STORE_SUBSCR_DICT,
             STORE_SUBSCR_LIST_INT,

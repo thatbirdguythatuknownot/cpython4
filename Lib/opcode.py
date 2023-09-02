@@ -166,8 +166,6 @@ def_op('SET_UPDATE', 163)
 def_op('DICT_MERGE', 164)
 def_op('DICT_UPDATE', 165)
 
-def_op('LIST_TO_TUPLE', 166)
-
 def_op('LOAD_FAST_LOAD_FAST', 168)
 def_op('STORE_FAST_LOAD_FAST', 169)
 def_op('STORE_FAST_STORE_FAST', 170)

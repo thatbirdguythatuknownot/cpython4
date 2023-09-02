@@ -556,17 +556,6 @@
             break;
         }
 
-        case LIST_TO_TUPLE: {
-            PyObject *list;
-            PyObject *res;
-            list = stack_pointer[-1];
-            res = _PyTuple_FromArray(_PyList_ITEMS(list), PyList_GET_SIZE(list));
-            Py_DECREF(list);
-            if (res == NULL) goto pop_1_error;
-            stack_pointer[-1] = res;
-            break;
-        }
-
         case STORE_SUBSCR: {
             static_assert(INLINE_CACHE_ENTRIES_STORE_SUBSCR == 1, "incorrect cache size");
             PyObject *sub;

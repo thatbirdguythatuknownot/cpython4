@@ -5390,7 +5390,36 @@ type_is_gc(PyTypeObject *type)
 }
 
 
+static PyObject *
+type_add(PyTypeObject *self, PyTypeObject *other)
+{
+    PyObject *args = PyTuple_New(3);
+    if (args == NULL) {
+        return NULL;
+    }
+    PyObject *bases = PyTuple_New(2);
+    if (bases == NULL) {
+        Py_DECREF(args);
+        return NULL;
+    }
+    PyObject *dict = PyDict_New();
+    if (dict == NULL) {
+        Py_DECREF(args);
+        Py_DECREF(bases);
+        return NULL;
+    }
+    PyTuple_SET_ITEM(bases, 0, Py_NewRef(self));
+    PyTuple_SET_ITEM(bases, 1, Py_NewRef(other));
+    PyTuple_SET_ITEM(args, 0, &_Py_STR(anon_unknown));
+    PyTuple_SET_ITEM(args, 1, bases);
+    PyTuple_SET_ITEM(args, 2, dict);
+    PyObject *res = type_new(Py_TYPE(self), args, NULL);
+    Py_DECREF(args);
+    return res;
+}
+
 static PyNumberMethods type_as_number = {
+        .nb_add = (binaryfunc)type_add,
         .nb_or = _Py_union_type_or, // Add __or__ function
 };
 

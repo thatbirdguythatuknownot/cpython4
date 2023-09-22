@@ -51,6 +51,10 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Break_type);
     Py_CLEAR(state->Call_type);
     Py_CLEAR(state->ClassDef_type);
+    Py_CLEAR(state->CompCall_singleton);
+    Py_CLEAR(state->CompCall_type);
+    Py_CLEAR(state->Comp_singleton);
+    Py_CLEAR(state->Comp_type);
     Py_CLEAR(state->Compare_type);
     Py_CLEAR(state->Composition_type);
     Py_CLEAR(state->Constant_type);
@@ -1603,7 +1607,7 @@ init_types(struct ast_state *state)
     if (!state->Or_singleton) return 0;
     state->operator_type = make_type(state, "operator", state->AST_type, NULL,
                                      0,
-        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv");
+        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv | Comp | CompCall");
     if (!state->operator_type) return 0;
     if (!add_attributes(state, state->operator_type, NULL, 0)) return 0;
     state->Add_type = make_type(state, "Add", state->operator_type, NULL, 0,
@@ -1696,6 +1700,20 @@ init_types(struct ast_state *state)
                                                   *)state->FloorDiv_type, NULL,
                                                   NULL);
     if (!state->FloorDiv_singleton) return 0;
+    state->Comp_type = make_type(state, "Comp", state->operator_type, NULL, 0,
+        "Comp");
+    if (!state->Comp_type) return 0;
+    state->Comp_singleton = PyType_GenericNew((PyTypeObject *)state->Comp_type,
+                                              NULL, NULL);
+    if (!state->Comp_singleton) return 0;
+    state->CompCall_type = make_type(state, "CompCall", state->operator_type,
+                                     NULL, 0,
+        "CompCall");
+    if (!state->CompCall_type) return 0;
+    state->CompCall_singleton = PyType_GenericNew((PyTypeObject
+                                                  *)state->CompCall_type, NULL,
+                                                  NULL);
+    if (!state->CompCall_singleton) return 0;
     state->unaryop_type = make_type(state, "unaryop", state->AST_type, NULL, 0,
         "unaryop = Invert | Not | UAdd | USub");
     if (!state->unaryop_type) return 0;
@@ -5227,6 +5245,10 @@ PyObject* ast2obj_operator(struct ast_state *state, operator_ty o)
             return Py_NewRef(state->BitAnd_singleton);
         case FloorDiv:
             return Py_NewRef(state->FloorDiv_singleton);
+        case Comp:
+            return Py_NewRef(state->Comp_singleton);
+        case CompCall:
+            return Py_NewRef(state->CompCall_singleton);
     }
     Py_UNREACHABLE();
 }
@@ -11057,6 +11079,22 @@ obj2ast_operator(struct ast_state *state, PyObject* obj, operator_ty* out,
         *out = FloorDiv;
         return 0;
     }
+    isinstance = PyObject_IsInstance(obj, state->Comp_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = Comp;
+        return 0;
+    }
+    isinstance = PyObject_IsInstance(obj, state->CompCall_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = CompCall;
+        return 0;
+    }
 
     PyErr_Format(PyExc_TypeError, "expected some sort of operator, but got %R", obj);
     return 1;
@@ -13414,6 +13452,12 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "FloorDiv", state->FloorDiv_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Comp", state->Comp_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "CompCall", state->CompCall_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "unaryop", state->unaryop_type) < 0) {

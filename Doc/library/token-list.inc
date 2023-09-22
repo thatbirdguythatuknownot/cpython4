@@ -213,6 +213,10 @@
 
    Token value for ``"$"``.
 
+.. data:: PIPEGTEQUAL
+
+   Token value for ``"|>="``.
+
 .. data:: OP
 
 .. data:: TYPE_IGNORE

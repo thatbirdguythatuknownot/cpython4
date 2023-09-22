@@ -914,6 +914,25 @@ fold_comp(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
     return 1;
 }
 
+static int
+fold_compassign(stmt_ty node, PyArena *arena, _PyASTOptimizeState *state)
+{
+    expr_ty ptr = NULL;
+
+    if (!fold_comp_internal(node->v.AugAssign.value, &ptr, NULL, state)) {
+        return 0;
+    }
+
+    if (!ptr) {
+        node->v.AugAssign.op = CompCall;
+    }
+    else {
+        ptr->v.Template.last = 1;
+    }
+
+    return 1;
+}
+
 #undef CALL
 #undef CALL_OPT
 #undef CALL_SEQ
@@ -1214,6 +1233,9 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case AugAssign_kind:
         CALL(astfold_expr, expr_ty, node_->v.AugAssign.target);
         CALL(astfold_expr, expr_ty, node_->v.AugAssign.value);
+        if (node_->v.AugAssign.op == Comp) {
+            CALL(fold_compassign, expr_ty, node_);
+        }
         break;
     case AnnAssign_kind:
         CALL(astfold_expr, expr_ty, node_->v.AnnAssign.target);

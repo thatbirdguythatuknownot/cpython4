@@ -39,6 +39,10 @@ struct ast_state {
     PyObject *Break_type;
     PyObject *Call_type;
     PyObject *ClassDef_type;
+    PyObject *CompCall_singleton;
+    PyObject *CompCall_type;
+    PyObject *Comp_singleton;
+    PyObject *Comp_type;
     PyObject *Compare_type;
     PyObject *Composition_type;
     PyObject *Constant_type;

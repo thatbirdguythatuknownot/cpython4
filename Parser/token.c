@@ -63,6 +63,7 @@ const char * const _PyParser_TokenNames[] = {
     "EXCLAMATION",
     "PIPEGT",
     "DOLLAR",
+    "PIPEGTEQUAL",
     "OP",
     "TYPE_IGNORE",
     "TYPE_COMMENT",
@@ -242,6 +243,15 @@ _PyToken_ThreeChars(int c1, int c2, int c3)
         case '>':
             switch (c3) {
             case '=': return RIGHTSHIFTEQUAL;
+            }
+            break;
+        }
+        break;
+    case '|':
+        switch (c2) {
+        case '>':
+            switch (c3) {
+            case '=': return PIPEGTEQUAL;
             }
             break;
         }

@@ -6440,8 +6440,22 @@ compiler_augassign(struct compiler *c, stmt_ty s)
 
     loc = LOC(s);
 
-    VISIT(c, expr, s->v.AugAssign.value);
-    ADDOP_INPLACE(c, loc, s->v.AugAssign.op);
+    if (s->v.AugAssign.op == Comp) {
+        ADDOP(c, loc, PIPEARG_MARKER);
+        VISIT(c, expr, s->v.AugAssign.value);
+        ADDOP(c, loc, PIPEARG_ENDMARKER);
+    }
+    else {
+        VISIT(c, expr, s->v.AugAssign.value);
+        if (s->v.AugAssign.op == CompCall) {
+            ADDOP(c, loc, PUSH_NULL);
+            ADDOP_I(c, loc, SWAP_N, 3);
+            ADDOP_I(c, loc, CALL, 1);
+        }
+        else {
+            ADDOP_INPLACE(c, loc, s->v.AugAssign.op);
+        }
+    }
 
     loc = LOC(e);
 

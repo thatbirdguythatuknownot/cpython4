@@ -759,7 +759,8 @@ validate_stmt(struct validator *state, stmt_ty stmt)
         break;
     case AugAssign_kind:
         ret = validate_expr(state, stmt->v.AugAssign.target, Store) &&
-            validate_expr(state, stmt->v.AugAssign.value, Load);
+            (!stmt->v.AugAssign.value ||
+             validate_expr(state, stmt->v.AugAssign.value, Load));
         break;
     case AnnAssign_kind:
         if (stmt->v.AnnAssign.target->kind != Name_kind &&

@@ -6446,14 +6446,29 @@ compiler_augassign(struct compiler *c, stmt_ty s)
         ADDOP(c, loc, PIPEARG_ENDMARKER);
     }
     else {
-        VISIT(c, expr, s->v.AugAssign.value);
-        if (s->v.AugAssign.op == CompCall) {
-            ADDOP(c, loc, PUSH_NULL);
-            ADDOP_I(c, loc, SWAP_N, 3);
-            ADDOP_I(c, loc, CALL, 1);
+        if (s->v.AugAssign.value) {
+            VISIT(c, expr, s->v.AugAssign.value);
+            if (s->v.AugAssign.op == CompCall) {
+                ADDOP(c, loc, PUSH_NULL);
+                ADDOP_I(c, loc, SWAP_N, 3);
+                ADDOP_I(c, loc, CALL, 1);
+            }
+            else {
+                ADDOP_INPLACE(c, loc, s->v.AugAssign.op);
+            }
         }
         else {
-            ADDOP_INPLACE(c, loc, s->v.AugAssign.op);
+            switch (s->v.AugAssign.op) {
+            case UAdd:
+                ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_UNARY_POSITIVE);
+                break;
+            case Not:
+                ADDOP(c, loc, UNARY_NOT);
+                break;
+            default:
+                ADDOP(c, loc, unaryop(s->v.AugAssign.op));
+                break;
+            }
         }
     }
 

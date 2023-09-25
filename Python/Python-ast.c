@@ -1207,7 +1207,7 @@ init_types(struct ast_state *state)
         "     | Delete(expr* targets)\n"
         "     | Assign(expr* targets, expr value, string? type_comment)\n"
         "     | TypeAlias(expr name, type_param* type_params, expr value)\n"
-        "     | AugAssign(expr target, operator op, expr value)\n"
+        "     | AugAssign(expr target, operator op, expr? value)\n"
         "     | AnnAssign(expr target, expr annotation, expr? value, int simple)\n"
         "     | For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)\n"
         "     | AsyncFor(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)\n"
@@ -1285,8 +1285,10 @@ init_types(struct ast_state *state)
     if (!state->TypeAlias_type) return 0;
     state->AugAssign_type = make_type(state, "AugAssign", state->stmt_type,
                                       AugAssign_fields, 3,
-        "AugAssign(expr target, operator op, expr value)");
+        "AugAssign(expr target, operator op, expr? value)");
     if (!state->AugAssign_type) return 0;
+    if (PyObject_SetAttr(state->AugAssign_type, state->value, Py_None) == -1)
+        return 0;
     state->AnnAssign_type = make_type(state, "AnnAssign", state->stmt_type,
                                       AnnAssign_fields, 4,
         "AnnAssign(expr target, expr annotation, expr? value, int simple)");
@@ -2312,11 +2314,6 @@ _PyAST_AugAssign(expr_ty target, operator_ty op, expr_ty value, int lineno, int
     if (!op) {
         PyErr_SetString(PyExc_ValueError,
                         "field 'op' is required for AugAssign");
-        return NULL;
-    }
-    if (!value) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'value' is required for AugAssign");
         return NULL;
     }
     p = (stmt_ty)_PyArena_Malloc(arena, sizeof(*p));
@@ -7265,9 +7262,9 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
             return 1;
         }
-        if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from AugAssign");
-            return 1;
+        if (tmp == NULL || tmp == Py_None) {
+            Py_CLEAR(tmp);
+            value = NULL;
         }
         else {
             int res;

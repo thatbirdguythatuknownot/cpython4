@@ -157,6 +157,8 @@ assignment[stmt_ty]:
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[yield_expr | star_expressions] { (--p->subn, d) }) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
+    | a=single_target b=unarassign &(';' | NEWLINE) {
+         _PyAST_AugAssign(a, b->kind, NULL, EXTRA) }
     | a=single_target b=augassign ~ c=(yield_expr | star_expressions) {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
     | invalid_assignment
@@ -178,6 +180,12 @@ augassign[AugOperator*]:
     | '**=' { _PyPegen_augoperator(p, Pow) }
     | '//=' { _PyPegen_augoperator(p, FloorDiv) }
     | '|>=' { _PyPegen_augoperator(p, Comp) }
+
+unarassign[AugOperator*]:
+    | ('+=' | '+' '=') { _PyPegen_augoperator(p, (operator_ty)UAdd) }
+    | ('-=' | '-' '=') { _PyPegen_augoperator(p, (operator_ty)USub) }
+    | '~' '=' { _PyPegen_augoperator(p, (operator_ty)Invert) }
+    | ('!=' | '!' '=') { _PyPegen_augoperator(p, (operator_ty)Not) }
 
 return_stmt[stmt_ty]:
     | 'return' a=[star_expressions] { _PyAST_Return(a, EXTRA) }
@@ -827,6 +835,7 @@ factor[expr_ty] (memo):
     | '+' a=factor { _PyAST_UnaryOp(UAdd, a, EXTRA) }
     | '-' a=factor { _PyAST_UnaryOp(USub, a, EXTRA) }
     | '~' a=factor { _PyAST_UnaryOp(Invert, a, EXTRA) }
+    | '!' a=factor { _PyAST_UnaryOp(Not, a, EXTRA) }
     | power
 
 power[expr_ty]:

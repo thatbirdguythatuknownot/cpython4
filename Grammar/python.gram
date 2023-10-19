@@ -180,6 +180,7 @@ augassign[AugOperator*]:
     | '**=' { _PyPegen_augoperator(p, Pow) }
     | '//=' { _PyPegen_augoperator(p, FloorDiv) }
     | '|>=' { _PyPegen_augoperator(p, Comp) }
+    | '??=' { _PyPegen_augoperator(p, Clsc) }
 
 unarassign[AugOperator*]:
     | ('+=' | '+' '=') { _PyPegen_augoperator(p, (operator_ty)UAdd) }
@@ -836,7 +837,11 @@ factor[expr_ty] (memo):
     | '-' a=factor { _PyAST_UnaryOp(USub, a, EXTRA) }
     | '~' a=factor { _PyAST_UnaryOp(Invert, a, EXTRA) }
     | '!' a=factor { _PyAST_UnaryOp(Not, a, EXTRA) }
+    | coalesce
     | power
+
+coalesce[expr_ty]:
+    | a=await_primary '??' b=factor { _PyAST_BinOp(a, Clsc, b, EXTRA) }
 
 power[expr_ty]:
     | a=await_primary '**' b=factor { _PyAST_BinOp(a, Pow, b, EXTRA) }

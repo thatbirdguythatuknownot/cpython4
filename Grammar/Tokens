@@ -57,6 +57,8 @@ EXCLAMATION             '!'
 PIPEGT                  '|>'
 DOLLAR                  '$'
 PIPEGTEQUAL             '|>='
+DOUBLEQMARK             '??'
+DOUBLEQMARKEQUAL        '??='
 
 OP
 TYPE_IGNORE

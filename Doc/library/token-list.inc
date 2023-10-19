@@ -217,6 +217,14 @@
 
    Token value for ``"|>="``.
 
+.. data:: DOUBLEQMARK
+
+   Token value for ``"??"``.
+
+.. data:: DOUBLEQMARKEQUAL
+
+   Token value for ``"??="``.
+
 .. data:: OP
 
 .. data:: TYPE_IGNORE

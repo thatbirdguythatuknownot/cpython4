@@ -6243,8 +6243,18 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_boolop(c, e);
     case BinOp_kind:
         VISIT(c, expr, e->v.BinOp.left);
-        VISIT(c, expr, e->v.BinOp.right);
-        ADDOP_BINARY(c, loc, e->v.BinOp.op);
+        if (e->v.BinOp.op == Clsc) {
+            NEW_JUMP_TARGET_LABEL(c, label);
+            ADDOP_I(c, LOC(e), COPY, 1);
+            ADDOP_JUMP(c, LOC(e), POP_JUMP_IF_NOT_NONE, label);
+            ADDOP(c, LOC(e), POP_TOP);
+            VISIT(c, expr, e->v.BinOp.right);
+            USE_LABEL(c, label);
+        }
+        else {
+            VISIT(c, expr, e->v.BinOp.right);
+            ADDOP_BINARY(c, loc, e->v.BinOp.op);
+        }
         break;
     case UnaryOp_kind:
         VISIT(c, expr, e->v.UnaryOp.operand);

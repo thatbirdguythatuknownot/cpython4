@@ -51,6 +51,8 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Break_type);
     Py_CLEAR(state->Call_type);
     Py_CLEAR(state->ClassDef_type);
+    Py_CLEAR(state->Clsc_singleton);
+    Py_CLEAR(state->Clsc_type);
     Py_CLEAR(state->CompCall_singleton);
     Py_CLEAR(state->CompCall_type);
     Py_CLEAR(state->Comp_singleton);
@@ -1609,7 +1611,7 @@ init_types(struct ast_state *state)
     if (!state->Or_singleton) return 0;
     state->operator_type = make_type(state, "operator", state->AST_type, NULL,
                                      0,
-        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv | Comp | CompCall");
+        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv | Comp | CompCall | Clsc");
     if (!state->operator_type) return 0;
     if (!add_attributes(state, state->operator_type, NULL, 0)) return 0;
     state->Add_type = make_type(state, "Add", state->operator_type, NULL, 0,
@@ -1716,6 +1718,12 @@ init_types(struct ast_state *state)
                                                   *)state->CompCall_type, NULL,
                                                   NULL);
     if (!state->CompCall_singleton) return 0;
+    state->Clsc_type = make_type(state, "Clsc", state->operator_type, NULL, 0,
+        "Clsc");
+    if (!state->Clsc_type) return 0;
+    state->Clsc_singleton = PyType_GenericNew((PyTypeObject *)state->Clsc_type,
+                                              NULL, NULL);
+    if (!state->Clsc_singleton) return 0;
     state->unaryop_type = make_type(state, "unaryop", state->AST_type, NULL, 0,
         "unaryop = Invert | Not | UAdd | USub");
     if (!state->unaryop_type) return 0;
@@ -5246,6 +5254,8 @@ PyObject* ast2obj_operator(struct ast_state *state, operator_ty o)
             return Py_NewRef(state->Comp_singleton);
         case CompCall:
             return Py_NewRef(state->CompCall_singleton);
+        case Clsc:
+            return Py_NewRef(state->Clsc_singleton);
     }
     Py_UNREACHABLE();
 }
@@ -11092,6 +11102,14 @@ obj2ast_operator(struct ast_state *state, PyObject* obj, operator_ty* out,
         *out = CompCall;
         return 0;
     }
+    isinstance = PyObject_IsInstance(obj, state->Clsc_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = Clsc;
+        return 0;
+    }
 
     PyErr_Format(PyExc_TypeError, "expected some sort of operator, but got %R", obj);
     return 1;
@@ -13455,6 +13473,9 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "CompCall", state->CompCall_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "Clsc", state->Clsc_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "unaryop", state->unaryop_type) < 0) {

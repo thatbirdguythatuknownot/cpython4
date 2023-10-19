@@ -64,6 +64,8 @@ const char * const _PyParser_TokenNames[] = {
     "PIPEGT",
     "DOLLAR",
     "PIPEGTEQUAL",
+    "DOUBLEQMARK",
+    "DOUBLEQMARKEQUAL",
     "OP",
     "TYPE_IGNORE",
     "TYPE_COMMENT",
@@ -178,6 +180,11 @@ _PyToken_TwoChars(int c1, int c2)
         case '>': return RIGHTSHIFT;
         }
         break;
+    case '?':
+        switch (c2) {
+        case '?': return DOUBLEQMARK;
+        }
+        break;
     case '@':
         switch (c2) {
         case '=': return ATEQUAL;
@@ -243,6 +250,15 @@ _PyToken_ThreeChars(int c1, int c2, int c3)
         case '>':
             switch (c3) {
             case '=': return RIGHTSHIFTEQUAL;
+            }
+            break;
+        }
+        break;
+    case '?':
+        switch (c2) {
+        case '?':
+            switch (c3) {
+            case '=': return DOUBLEQMARKEQUAL;
             }
             break;
         }

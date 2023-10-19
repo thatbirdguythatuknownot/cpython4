@@ -483,6 +483,12 @@ fold_binop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
         return optimize_format(node, lv, rhs->v.Tuple.elts, arena);
     }
 
+    if (node->v.BinOp.op == Clsc && Py_Is(lv, Py_None))
+    {
+        COPY_NODE(node, rhs);
+        return 1;
+    }
+
     if (rhs->kind != Constant_kind) {
         return 1;
     }

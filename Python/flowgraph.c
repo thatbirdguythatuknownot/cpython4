@@ -726,6 +726,14 @@ stackdepth_push(basicblock ***sp, basicblock *b, int depth)
     return SUCCESS;
 }
 
+#if 0
+#define Dputs(...) fputs(__VA_ARGS__, stderr)
+#define Dprintf(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define Dputs(...)
+#define Dprintf(...)
+#endif
+
 /* Find the flow path that needs the largest stack.  We assume that
  * cycles in the flow graph have no net effect on the stack depth.
  */
@@ -748,9 +756,11 @@ calculate_stackdepth(cfg_builder *g)
     if (stackdepth_push(&sp, entryblock, 0) < 0) {
         goto error;
     }
+    Dputs("NEW BLOCK\n");
     while (sp != stack) {
         basicblock *b = *--sp;
         int depth = b->b_startdepth;
+        Dprintf("NEW ITERATION DEPTH %d\n", depth);
         assert(depth >= 0);
         basicblock *next = b->b_next;
         for (int i = 0; i < b->b_iused; i++) {
@@ -787,6 +797,7 @@ calculate_stackdepth(cfg_builder *g)
                 goto error;
             }
             int new_depth = depth + effect;
+            Dprintf("%s(%d) -> %d + %d = %d\n", _PyOpcode_OpName[instr->i_opcode], instr->i_oparg, depth, effect, new_depth);
             if (new_depth < 0) {
                PyErr_Format(PyExc_ValueError,
                             "Invalid CFG, stack underflow");
@@ -809,6 +820,7 @@ calculate_stackdepth(cfg_builder *g)
                 if (target_depth > maxdepth) {
                     maxdepth = target_depth;
                 }
+                Dprintf("%s(%d) -> %d + %d = %d | %d + %d = %d (TO BB DEPTH %d)\n", _PyOpcode_OpName[instr->i_opcode], instr->i_oparg, depth, effect, target_depth, depth, new_depth - depth, new_depth, instr->i_target->b_startdepth);
                 if (stackdepth_push(&sp, instr->i_target, target_depth) < 0) {
                     goto error;
                 }
@@ -820,17 +832,24 @@ calculate_stackdepth(cfg_builder *g)
             {
                 /* remaining code is dead */
                 next = NULL;
+                Dputs("BROKE!\n");
                 break;
             }
         }
         if (next != NULL) {
             assert(BB_HAS_FALLTHROUGH(b));
+            Dprintf("FINISHED! (%d ! %d)\n", next->b_startdepth, depth);
+            if (!(next->b_startdepth < 0 || depth == next->b_startdepth)) {
+                Dputs("OH NO!\n");
+                continue;
+            }
             if (stackdepth_push(&sp, next, depth) < 0) {
                 goto error;
             }
         }
     }
     stackdepth = maxdepth;
+    Dputs("\n\n\n");
 error:
     PyMem_Free(stack);
     return stackdepth;

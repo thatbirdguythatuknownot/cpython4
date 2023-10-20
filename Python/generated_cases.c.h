@@ -3040,14 +3040,18 @@
                 }
             }
             stack_pointer[-1] = b;
-            // POP_POPJUMP_IF_TRUE
+            // POP_IF_TRUE
             cond = stack_pointer[-1];
             {
                 assert(PyBool_Check(cond));
                 if (Py_IsTrue(cond)) {
-                    STACK_SHRINK(2);
-                    JUMPBY(oparg);
+                    STACK_SHRINK(1);
                 }
+            }
+            // POP_JUMP_IF_TRUE
+            {
+                assert(PyBool_Check(cond));
+                JUMPBY(oparg * Py_IsTrue(cond));
             }
             STACK_SHRINK((jump ? 1 : 0));
             STACK_SHRINK(1);
@@ -3070,16 +3074,142 @@
                 }
             }
             stack_pointer[-1] = b;
-            // POP_POP2JUMP_IF_TRUE
+            // POP_IF_TRUE
             cond = stack_pointer[-1];
             {
                 assert(PyBool_Check(cond));
                 if (Py_IsTrue(cond)) {
-                    STACK_SHRINK(2);
-                    JUMPBY(oparg);
+                    STACK_SHRINK(1);
                 }
             }
+            stack_pointer[-1 - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            // POP_JUMP_IF_TRUE
+            {
+                assert(PyBool_Check(cond));
+                JUMPBY(oparg * Py_IsTrue(cond));
+            }
             STACK_SHRINK((jump ? 1 : 0) + (jump ? 1 : 0));
+            STACK_SHRINK(1);
+            DISPATCH();
+        }
+
+        TARGET(POP_POP3JUMP_IF_NONE) {
+            PyObject *value;
+            PyObject *b;
+            PyObject *cond;
+            // IS_NONE
+            value = stack_pointer[-1];
+            {
+                if (Py_IsNone(value)) {
+                    b = Py_True;
+                }
+                else {
+                    b = Py_False;
+                    Py_DECREF(value);
+                }
+            }
+            stack_pointer[-1] = b;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            stack_pointer[-1 - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            // POP_JUMP_IF_TRUE
+            {
+                assert(PyBool_Check(cond));
+                JUMPBY(oparg * Py_IsTrue(cond));
+            }
+            STACK_SHRINK((jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0));
+            STACK_SHRINK(1);
+            DISPATCH();
+        }
+
+        TARGET(POP_POP4JUMP_IF_NONE) {
+            PyObject *value;
+            PyObject *b;
+            PyObject *cond;
+            // IS_NONE
+            value = stack_pointer[-1];
+            {
+                if (Py_IsNone(value)) {
+                    b = Py_True;
+                }
+                else {
+                    b = Py_False;
+                    Py_DECREF(value);
+                }
+            }
+            stack_pointer[-1] = b;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            stack_pointer[-1 - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0) - (jump ? 1 : 0)] = cond;
+            // POP_IF_TRUE
+            cond = stack_pointer[-1 - (jump ? 1 : 0) - (jump ? 1 : 0) - (jump ? 1 : 0)];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(1);
+                }
+            }
+            // POP_JUMP_IF_TRUE
+            {
+                assert(PyBool_Check(cond));
+                JUMPBY(oparg * Py_IsTrue(cond));
+            }
+            STACK_SHRINK((jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0));
             STACK_SHRINK(1);
             DISPATCH();
         }

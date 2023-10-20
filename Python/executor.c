@@ -64,6 +64,7 @@ _PyUopExecute(_PyExecutorObject *executor, _PyInterpreterFrame *frame, PyObject 
     int pc = 0;
     int opcode;
     int oparg;
+    int jump = 0;
     uint64_t operand;
 
     for (;;) {

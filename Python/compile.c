@@ -6326,16 +6326,19 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
     case BoolOp_kind:
         return compiler_boolop(c, e);
     case BinOp_kind:
-        VISIT(c, expr, e->v.BinOp.left);
         if (e->v.BinOp.op == Clsc) {
-            NEW_JUMP_TARGET_LABEL(c, label);
+            NEW_JUMP_TARGET_LABEL(c, l);
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            compiler_visit_noneaware(c, e->v.BinOp.left, l2);
             ADDOP_I(c, loc, COPY, 1);
-            ADDOP_JUMP(c, loc, POP_JUMP_IF_NOT_NONE, label);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NOT_NONE, l);
+            USE_LABEL(c, l2);
             ADDOP(c, loc, POP_TOP);
             VISIT(c, expr, e->v.BinOp.right);
-            USE_LABEL(c, label);
+            USE_LABEL(c, l);
         }
         else {
+            VISIT(c, expr, e->v.BinOp.left);
             VISIT(c, expr, e->v.BinOp.right);
             ADDOP_BINARY(c, loc, e->v.BinOp.op);
         }
@@ -6466,6 +6469,9 @@ is_two_element_slice(expr_ty s)
 static int
 compiler_augassign(struct compiler *c, stmt_ty s)
 {
+    jump_target_label l = NO_LABEL;
+    int none_aware = 0;
+
     assert(s->kind == AugAssign_kind);
     expr_ty e = s->v.AugAssign.target;
 
@@ -6473,13 +6479,29 @@ compiler_augassign(struct compiler *c, stmt_ty s)
 
     switch (e->kind) {
     case Attribute_kind:
-        VISIT(c, expr, e->v.Attribute.value);
+        if ((none_aware = e->v.Attribute.aware)) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
+        compiler_visit_noneaware(c, e->v.Attribute.value, l);
         ADDOP_I(c, loc, COPY, 1);
+        if (none_aware) {
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        }
         loc = update_start_location_to_match_attr(c, loc, e);
         ADDOP_NAME(c, loc, LOAD_ATTR, e->v.Attribute.attr, names);
         break;
     case Subscript_kind:
-        VISIT(c, expr, e->v.Subscript.value);
+        if ((none_aware = e->v.Subscript.aware)) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
+        compiler_visit_noneaware(c, e->v.Subscript.value, l);
+        if (none_aware) {
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        }
         if (is_two_element_slice(e->v.Subscript.slice)) {
             RETURN_IF_ERROR(compiler_slice(c, e->v.Subscript.slice));
             ADDOP_I(c, loc, COPY, 3);
@@ -6513,17 +6535,37 @@ compiler_augassign(struct compiler *c, stmt_ty s)
     }
     else {
         if (s->v.AugAssign.value) {
+            jump_target_label l2 = NO_LABEL;
+            if (s->v.AugAssign.op == Clsc) {
+                NEW_JUMP_TARGET_LABEL(c, l3);
+                l2 = l3;
+                ADDOP_I(c, loc, COPY, 1);
+                ADDOP_JUMP(c, loc, POP_JUMP_IF_NOT_NONE, l2);
+                if (none_aware) {
+                    USE_LABEL(c, l);
+                }
+                ADDOP(c, loc, POP_TOP);
+            }
+            else if (none_aware) {
+                USE_LABEL(c, l);
+            }
             VISIT(c, expr, s->v.AugAssign.value);
             if (s->v.AugAssign.op == CompCall) {
                 ADDOP(c, loc, PUSH_NULL);
                 ADDOP_I(c, loc, SWAP_N, 3);
                 ADDOP_I(c, loc, CALL, 1);
             }
-            else {
+            else if (!IS_LABEL(l2)) {
                 ADDOP_INPLACE(c, loc, s->v.AugAssign.op);
+            }
+            else {
+                USE_LABEL(c, l2);
             }
         }
         else {
+            if (none_aware) {
+                USE_LABEL(c, l);
+            }
             switch (s->v.AugAssign.op) {
             case UAdd:
                 ADDOP_I(c, loc, CALL_INTRINSIC_1, INTRINSIC_UNARY_POSITIVE);
@@ -6543,20 +6585,43 @@ compiler_augassign(struct compiler *c, stmt_ty s)
     switch (e->kind) {
     case Attribute_kind:
         loc = update_start_location_to_match_attr(c, loc, e);
+        if (none_aware) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+            ADDOP_I(c, loc, COPY, 2);
+            ADDOP_JUMP(c, loc, POP_POP2JUMP_IF_NONE, l);
+        }
         ADDOP_I(c, loc, SWAP, 2);
         ADDOP_NAME(c, loc, STORE_ATTR, e->v.Attribute.attr, names);
+        if (none_aware) {
+            USE_LABEL(c, l);
+        }
         break;
     case Subscript_kind:
+        if (none_aware) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+            ADDOP_I(c, loc, COPY, 1);
+        }
         if (is_two_element_slice(e->v.Subscript.slice)) {
+            if (none_aware) {
+                ADDOP_JUMP(c, loc, POP_POP4JUMP_IF_NONE, l);
+            }
             ADDOP_I(c, loc, SWAP, 4);
             ADDOP_I(c, loc, SWAP, 3);
             ADDOP_I(c, loc, SWAP, 2);
             ADDOP(c, loc, STORE_SLICE);
         }
         else {
+            if (none_aware) {
+                ADDOP_JUMP(c, loc, POP_POP3JUMP_IF_NONE, l);
+            }
             ADDOP_I(c, loc, SWAP, 3);
             ADDOP_I(c, loc, SWAP, 2);
             ADDOP(c, loc, STORE_SUBSCR);
+        }
+        if (none_aware) {
+            USE_LABEL(c, l);
         }
         break;
     case Name_kind:
@@ -6564,6 +6629,7 @@ compiler_augassign(struct compiler *c, stmt_ty s)
     default:
         Py_UNREACHABLE();
     }
+
     return SUCCESS;
 }
 

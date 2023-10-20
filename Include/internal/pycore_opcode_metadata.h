@@ -44,19 +44,20 @@
 #define _GUARD_TYPE_VERSION 318
 #define _CHECK_MANAGED_OBJECT_HAS_VALUES 319
 #define _LOAD_ATTR_INSTANCE_VALUE 320
-#define IS_NONE 321
-#define _ITER_CHECK_LIST 322
-#define _IS_ITER_EXHAUSTED_LIST 323
-#define _ITER_NEXT_LIST 324
-#define _ITER_CHECK_TUPLE 325
-#define _IS_ITER_EXHAUSTED_TUPLE 326
-#define _ITER_NEXT_TUPLE 327
-#define _ITER_CHECK_RANGE 328
-#define _IS_ITER_EXHAUSTED_RANGE 329
-#define _ITER_NEXT_RANGE 330
-#define _POP_JUMP_IF_FALSE 331
-#define _POP_JUMP_IF_TRUE 332
-#define JUMP_TO_TOP 333
+#define POP_IF_TRUE 321
+#define IS_NONE 322
+#define _ITER_CHECK_LIST 323
+#define _IS_ITER_EXHAUSTED_LIST 324
+#define _ITER_NEXT_LIST 325
+#define _ITER_CHECK_TUPLE 326
+#define _IS_ITER_EXHAUSTED_TUPLE 327
+#define _ITER_NEXT_TUPLE 328
+#define _ITER_CHECK_RANGE 329
+#define _IS_ITER_EXHAUSTED_RANGE 330
+#define _ITER_NEXT_RANGE 331
+#define _POP_JUMP_IF_FALSE 332
+#define _POP_JUMP_IF_TRUE 333
+#define JUMP_TO_TOP 334
 
 #ifndef NEED_OPCODE_METADATA
 extern int _PyOpcode_num_popped(int opcode, int oparg, bool jump);
@@ -360,6 +361,10 @@ _PyOpcode_num_popped(int opcode, int oparg, bool jump) {
             return (jump ? 1 : 0) + 1;
         case POP_POP2JUMP_IF_NONE:
             return (jump ? 1 : 0) + (jump ? 1 : 0) + 1;
+        case POP_POP3JUMP_IF_NONE:
+            return (jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0) + 1;
+        case POP_POP4JUMP_IF_NONE:
+            return (jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0) + (jump ? 1 : 0) + 1;
         case POP_JUMP_IF_NOT_NONE:
             return 1;
         case JUMP_BACKWARD_NO_INTERRUPT:
@@ -818,6 +823,10 @@ _PyOpcode_num_pushed(int opcode, int oparg, bool jump) {
             return 0;
         case POP_POP2JUMP_IF_NONE:
             return 0;
+        case POP_POP3JUMP_IF_NONE:
+            return 0;
+        case POP_POP4JUMP_IF_NONE:
+            return 0;
         case POP_JUMP_IF_NOT_NONE:
             return 0;
         case JUMP_BACKWARD_NO_INTERRUPT:
@@ -1184,6 +1193,8 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[OPCODE_METADATA_SIZE] = {
     [POP_JUMP_IF_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
     [POP_POPJUMP_IF_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
     [POP_POP2JUMP_IF_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
+    [POP_POP3JUMP_IF_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
+    [POP_POP4JUMP_IF_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
     [POP_JUMP_IF_NOT_NONE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
     [JUMP_BACKWARD_NO_INTERRUPT] = { true, INSTR_FMT_IB, HAS_ARG_FLAG | HAS_JUMP_FLAG },
     [GET_LEN] = { true, INSTR_FMT_IX, 0 },
@@ -1412,6 +1423,7 @@ const char * const _PyOpcode_uop_name[OPCODE_UOP_NAME_SIZE] = {
     [_GUARD_TYPE_VERSION] = "_GUARD_TYPE_VERSION",
     [_CHECK_MANAGED_OBJECT_HAS_VALUES] = "_CHECK_MANAGED_OBJECT_HAS_VALUES",
     [_LOAD_ATTR_INSTANCE_VALUE] = "_LOAD_ATTR_INSTANCE_VALUE",
+    [POP_IF_TRUE] = "POP_IF_TRUE",
     [IS_NONE] = "IS_NONE",
     [_ITER_CHECK_LIST] = "_ITER_CHECK_LIST",
     [_IS_ITER_EXHAUSTED_LIST] = "_IS_ITER_EXHAUSTED_LIST",

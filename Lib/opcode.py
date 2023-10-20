@@ -155,9 +155,6 @@ def_op('YIELD_VALUE', 150)
 def_op('RESUME', 151)   # This must be kept in sync with deepfreeze.py
 def_op('MATCH_CLASS', 152)
 
-def_op('POP_POPJUMP_IF_NONE', 153)
-def_op('POP_POP2JUMP_IF_NONE', 154)
-
 def_op('BUILD_CONST_KEY_MAP', 156)
 def_op('BUILD_STRING', 157)
 def_op('CONVERT_VALUE', 158)
@@ -179,6 +176,11 @@ def_op('CALL_INTRINSIC_2', 174)
 def_op('LOAD_FROM_DICT_OR_GLOBALS', 175)
 def_op('LOAD_FROM_DICT_OR_DEREF', 176)
 def_op('SET_FUNCTION_ATTRIBUTE', 177)    # Attribute
+
+def_op('POP_POPJUMP_IF_NONE', 180)
+def_op('POP_POP2JUMP_IF_NONE', 181)
+def_op('POP_POP3JUMP_IF_NONE', 182)
+def_op('POP_POP4JUMP_IF_NONE', 183)
 
 # Optimizer hook
 def_op('ENTER_EXECUTOR', 230)

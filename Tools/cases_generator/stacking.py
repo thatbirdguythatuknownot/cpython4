@@ -276,7 +276,7 @@ def get_stack_effect_info_for_macro(mac: MacroInstruction) -> tuple[str, str]:
     managers = get_managers(parts)
     popped = StackOffset()
     for mgr in managers:
-        if less_than(mgr.min_offset, popped):
+        if less_than(mgr.min_offset, popped) or popped.as_index() < mgr.min_offset.as_index():
             popped = mgr.min_offset.clone()
     # Compute pushed = final - popped
     pushed = managers[-1].final_offset.clone()

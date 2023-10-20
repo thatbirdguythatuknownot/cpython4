@@ -1835,6 +1835,18 @@
             break;
         }
 
+        case POP_IF_TRUE: {
+            PyObject *cond;
+            cond = stack_pointer[-1];
+            assert(PyBool_Check(cond));
+            if (Py_IsTrue(cond)) {
+                STACK_SHRINK(1);
+            }
+            STACK_SHRINK((jump ? 1 : 0));
+            stack_pointer[-1] = cond;
+            break;
+        }
+
         case IS_NONE: {
             PyObject *value;
             PyObject *b;

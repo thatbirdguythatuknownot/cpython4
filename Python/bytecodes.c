@@ -2288,19 +2288,10 @@ dummy_func(
             JUMPBY(oparg * Py_IsTrue(cond));
         }
 
-        op(POP_POPJUMP_IF_TRUE, (unused if (jump), cond -- )) {
+        op(POP_IF_TRUE, (unused if (jump), cond -- cond)) {
             assert(PyBool_Check(cond));
             if (Py_IsTrue(cond)) {
-                STACK_SHRINK(2);
-                JUMPBY(oparg);
-            }
-        }
-
-        op(POP_POP2JUMP_IF_TRUE, (unused if (jump), unused if (jump), cond -- )) {
-            assert(PyBool_Check(cond));
-            if (Py_IsTrue(cond)) {
-                STACK_SHRINK(2);
-                JUMPBY(oparg);
+                STACK_SHRINK(1);
             }
         }
 
@@ -2316,9 +2307,17 @@ dummy_func(
 
         macro(POP_JUMP_IF_NONE) = IS_NONE + POP_JUMP_IF_TRUE;
 
-        macro(POP_POPJUMP_IF_NONE) = IS_NONE + POP_POPJUMP_IF_TRUE;
+        macro(POP_POPJUMP_IF_NONE) =
+            IS_NONE + POP_IF_TRUE + POP_JUMP_IF_TRUE;
 
-        macro(POP_POP2JUMP_IF_NONE) = IS_NONE + POP_POP2JUMP_IF_TRUE;
+        macro(POP_POP2JUMP_IF_NONE)
+            = IS_NONE + POP_IF_TRUE + POP_IF_TRUE + POP_JUMP_IF_TRUE;
+
+        macro(POP_POP3JUMP_IF_NONE)
+            = IS_NONE + POP_IF_TRUE + POP_IF_TRUE + POP_IF_TRUE + POP_JUMP_IF_TRUE;
+
+        macro(POP_POP4JUMP_IF_NONE)
+            = IS_NONE + POP_IF_TRUE + POP_IF_TRUE + POP_IF_TRUE + POP_IF_TRUE + POP_JUMP_IF_TRUE;
 
         macro(POP_JUMP_IF_NOT_NONE) = IS_NONE + POP_JUMP_IF_FALSE;
 

@@ -155,6 +155,9 @@ def_op('YIELD_VALUE', 150)
 def_op('RESUME', 151)   # This must be kept in sync with deepfreeze.py
 def_op('MATCH_CLASS', 152)
 
+def_op('POP_POPJUMP_IF_NONE', 153)
+def_op('POP_POP2JUMP_IF_NONE', 154)
+
 def_op('BUILD_CONST_KEY_MAP', 156)
 def_op('BUILD_STRING', 157)
 def_op('CONVERT_VALUE', 158)

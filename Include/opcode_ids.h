@@ -110,6 +110,8 @@ extern "C" {
 #define YIELD_VALUE                            150
 #define RESUME                                 151
 #define MATCH_CLASS                            152
+#define POP_POPJUMP_IF_NONE                    153
+#define POP_POP2JUMP_IF_NONE                   154
 #define BUILD_CONST_KEY_MAP                    156
 #define BUILD_STRING                           157
 #define CONVERT_VALUE                          158
@@ -213,24 +215,24 @@ extern "C" {
 #define FOR_ITER_TUPLE                         132
 #define FOR_ITER_RANGE                         136
 #define FOR_ITER_GEN                           148
-#define CALL_BOUND_METHOD_EXACT_ARGS           153
-#define CALL_PY_EXACT_ARGS                     154
-#define CALL_PY_WITH_DEFAULTS                  155
-#define CALL_NO_KW_TYPE_1                      160
-#define CALL_NO_KW_STR_1                       161
-#define CALL_NO_KW_TUPLE_1                     166
-#define CALL_BUILTIN_CLASS                     167
-#define CALL_NO_KW_BUILTIN_O                   178
-#define CALL_NO_KW_BUILTIN_FAST                179
-#define CALL_BUILTIN_FAST_WITH_KEYWORDS        180
-#define CALL_NO_KW_LEN                         181
-#define CALL_NO_KW_ISINSTANCE                  182
-#define CALL_NO_KW_LIST_APPEND                 183
-#define CALL_NO_KW_METHOD_DESCRIPTOR_O         184
-#define CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS 185
-#define CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS    186
-#define CALL_NO_KW_METHOD_DESCRIPTOR_FAST      187
-#define CALL_NO_KW_ALLOC_AND_ENTER_INIT        188
+#define CALL_BOUND_METHOD_EXACT_ARGS           155
+#define CALL_PY_EXACT_ARGS                     160
+#define CALL_PY_WITH_DEFAULTS                  161
+#define CALL_NO_KW_TYPE_1                      166
+#define CALL_NO_KW_STR_1                       167
+#define CALL_NO_KW_TUPLE_1                     178
+#define CALL_BUILTIN_CLASS                     179
+#define CALL_NO_KW_BUILTIN_O                   180
+#define CALL_NO_KW_BUILTIN_FAST                181
+#define CALL_BUILTIN_FAST_WITH_KEYWORDS        182
+#define CALL_NO_KW_LEN                         183
+#define CALL_NO_KW_ISINSTANCE                  184
+#define CALL_NO_KW_LIST_APPEND                 185
+#define CALL_NO_KW_METHOD_DESCRIPTOR_O         186
+#define CALL_METHOD_DESCRIPTOR_FAST_WITH_KEYWORDS 187
+#define CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS    188
+#define CALL_NO_KW_METHOD_DESCRIPTOR_FAST      189
+#define CALL_NO_KW_ALLOC_AND_ENTER_INIT        190
 
 
 #ifdef __cplusplus

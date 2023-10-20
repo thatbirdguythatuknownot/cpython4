@@ -1108,8 +1108,8 @@ star_target[expr_ty] (memo):
     | target_with_star_atom
 
 target_with_star_atom[expr_ty] (memo):
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, 0, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, 0, EXTRA) }
+    | a=t_primary n='?'? '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, n != NULL, EXTRA) }
+    | a=t_primary n='?'? '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, n != NULL, EXTRA) }
     | star_atom
 
 star_atom[expr_ty]:
@@ -1124,8 +1124,8 @@ single_target[expr_ty]:
     | '(' a=single_target ')' { a }
 
 single_subscript_attribute_target[expr_ty]:
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, 0, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, 0, EXTRA) }
+    | a=t_primary n='?'? '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, n != NULL, EXTRA) }
+    | a=t_primary n='?'? '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, n != NULL, EXTRA) }
 
 t_primary[expr_ty]:
     | a=t_primary n='?'? '.' b=NAME &t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
@@ -1140,7 +1140,8 @@ t_primary[expr_ty]:
                  EXTRA) }
     | a=atom &t_lookahead { a }
 
-t_lookahead: '(' | '[' | '.'
+t_lookahead: '?'? t_lookmain
+t_lookmain: '(' | '[' | '.'
 
 # Targets for del statements
 # --------------------------
@@ -1148,8 +1149,8 @@ t_lookahead: '(' | '[' | '.'
 del_targets[asdl_expr_seq*]: a[asdl_expr_seq*]=','.del_target+ [','] { a }
 
 del_target[expr_ty] (memo):
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Del, 0, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Del, 0, EXTRA) }
+    | a=t_primary n='?'? '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Del, n != NULL, EXTRA) }
+    | a=t_primary n='?'? '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Del, n != NULL, EXTRA) }
     | del_t_atom
 
 del_t_atom[expr_ty]:

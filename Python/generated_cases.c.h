@@ -3024,6 +3024,66 @@
             DISPATCH();
         }
 
+        TARGET(POP_POPJUMP_IF_NONE) {
+            PyObject *value;
+            PyObject *b;
+            PyObject *cond;
+            // IS_NONE
+            value = stack_pointer[-1];
+            {
+                if (Py_IsNone(value)) {
+                    b = Py_True;
+                }
+                else {
+                    b = Py_False;
+                    Py_DECREF(value);
+                }
+            }
+            stack_pointer[-1] = b;
+            // POP_POPJUMP_IF_TRUE
+            cond = stack_pointer[-1];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(2);
+                    JUMPBY(oparg);
+                }
+            }
+            STACK_SHRINK((jump ? 1 : 0));
+            STACK_SHRINK(1);
+            DISPATCH();
+        }
+
+        TARGET(POP_POP2JUMP_IF_NONE) {
+            PyObject *value;
+            PyObject *b;
+            PyObject *cond;
+            // IS_NONE
+            value = stack_pointer[-1];
+            {
+                if (Py_IsNone(value)) {
+                    b = Py_True;
+                }
+                else {
+                    b = Py_False;
+                    Py_DECREF(value);
+                }
+            }
+            stack_pointer[-1] = b;
+            // POP_POP2JUMP_IF_TRUE
+            cond = stack_pointer[-1];
+            {
+                assert(PyBool_Check(cond));
+                if (Py_IsTrue(cond)) {
+                    STACK_SHRINK(2);
+                    JUMPBY(oparg);
+                }
+            }
+            STACK_SHRINK((jump ? 1 : 0) + (jump ? 1 : 0));
+            STACK_SHRINK(1);
+            DISPATCH();
+        }
+
         TARGET(POP_JUMP_IF_NOT_NONE) {
             PyObject *value;
             PyObject *b;

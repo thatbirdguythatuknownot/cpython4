@@ -6279,7 +6279,10 @@ compiler_visit_noneaware(struct compiler *c, expr_ty e, jump_target_label l)
         compiler_visit_noneaware(c, e->v.Attribute.value, l);
         if (e->v.Attribute.aware) {
             ADDOP_I(c, loc, COPY, 1);
-            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+            expr_context_ty ctx = e->v.Attribute.ctx;
+            ADDOP_JUMP(c, loc, ctx == Load ? POP_JUMP_IF_NONE :
+                               ctx == Del ? POP_POPJUMP_IF_NONE :
+                               POP_POP2JUMP_IF_NONE, l);
         }
         loc = update_start_location_to_match_attr(c, loc, e);
         switch (e->v.Attribute.ctx) {
@@ -6768,7 +6771,9 @@ compiler_subscript(struct compiler *c, expr_ty e, jump_target_label l)
     compiler_visit_noneaware(c, e->v.Subscript.value, l);
     if (e->v.Subscript.aware) {
         ADDOP_I(c, loc, COPY, 1);
-        ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        ADDOP_JUMP(c, loc, ctx == Load ? POP_JUMP_IF_NONE :
+                           ctx == Del ? POP_POPJUMP_IF_NONE :
+                           POP_POP2JUMP_IF_NONE, l);
     }
 
     if (is_two_element_slice(e->v.Subscript.slice) && ctx != Del) {

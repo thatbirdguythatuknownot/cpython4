@@ -127,6 +127,7 @@ dummy_func(
     PyObject *type;
     PyObject *typevars;
     int values_or_none;
+    int jump;
 
     switch (opcode) {
 
@@ -2287,6 +2288,22 @@ dummy_func(
             JUMPBY(oparg * Py_IsTrue(cond));
         }
 
+        op(POP_POPJUMP_IF_TRUE, (unused if (jump), cond -- )) {
+            assert(PyBool_Check(cond));
+            if (Py_IsTrue(cond)) {
+                STACK_SHRINK(2);
+                JUMPBY(oparg);
+            }
+        }
+
+        op(POP_POP2JUMP_IF_TRUE, (unused if (jump), unused if (jump), cond -- )) {
+            assert(PyBool_Check(cond));
+            if (Py_IsTrue(cond)) {
+                STACK_SHRINK(2);
+                JUMPBY(oparg);
+            }
+        }
+
         op(IS_NONE, (value -- b)) {
             if (Py_IsNone(value)) {
                 b = Py_True;
@@ -2298,6 +2315,10 @@ dummy_func(
         }
 
         macro(POP_JUMP_IF_NONE) = IS_NONE + POP_JUMP_IF_TRUE;
+
+        macro(POP_POPJUMP_IF_NONE) = IS_NONE + POP_POPJUMP_IF_TRUE;
+
+        macro(POP_POP2JUMP_IF_NONE) = IS_NONE + POP_POP2JUMP_IF_TRUE;
 
         macro(POP_JUMP_IF_NOT_NONE) = IS_NONE + POP_JUMP_IF_FALSE;
 

@@ -660,6 +660,7 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int 
 #ifdef LLTRACE
     int lltrace = 0;
 #endif
+    int jump = 0;
 
     _PyCFrame cframe;
     _PyInterpreterFrame  entry_frame;

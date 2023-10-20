@@ -194,6 +194,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->asname);
     Py_CLEAR(state->ast);
     Py_CLEAR(state->attr);
+    Py_CLEAR(state->aware);
     Py_CLEAR(state->bases);
     Py_CLEAR(state->body);
     Py_CLEAR(state->boolop_type);
@@ -309,6 +310,7 @@ static int init_identifiers(struct ast_state *state)
     if ((state->asname = PyUnicode_InternFromString("asname")) == NULL) return 0;
     if ((state->ast = PyUnicode_InternFromString("ast")) == NULL) return 0;
     if ((state->attr = PyUnicode_InternFromString("attr")) == NULL) return 0;
+    if ((state->aware = PyUnicode_InternFromString("aware")) == NULL) return 0;
     if ((state->bases = PyUnicode_InternFromString("bases")) == NULL) return 0;
     if ((state->body = PyUnicode_InternFromString("body")) == NULL) return 0;
     if ((state->bound = PyUnicode_InternFromString("bound")) == NULL) return 0;
@@ -640,6 +642,7 @@ static const char * const Call_fields[]={
     "func",
     "args",
     "keywords",
+    "aware",
 };
 static const char * const FormattedValue_fields[]={
     "value",
@@ -660,11 +663,13 @@ static const char * const Attribute_fields[]={
     "value",
     "attr",
     "ctx",
+    "aware",
 };
 static const char * const Subscript_fields[]={
     "value",
     "slice",
     "ctx",
+    "aware",
 };
 static const char * const Starred_fields[]={
     "value",
@@ -1415,13 +1420,13 @@ init_types(struct ast_state *state)
         "     | Yield(expr? value)\n"
         "     | YieldFrom(expr value)\n"
         "     | Compare(expr left, cmpop* ops, expr* comparators)\n"
-        "     | Call(expr func, expr* args, keyword* keywords)\n"
+        "     | Call(expr func, expr* args, keyword* keywords, int aware)\n"
         "     | FormattedValue(expr value, int conversion, expr? format_spec)\n"
         "     | JoinedStr(expr* values)\n"
         "     | Constant(constant value, string? kind)\n"
         "     | Template(int last)\n"
-        "     | Attribute(expr value, identifier attr, expr_context ctx)\n"
-        "     | Subscript(expr value, expr slice, expr_context ctx)\n"
+        "     | Attribute(expr value, identifier attr, expr_context ctx, int aware)\n"
+        "     | Subscript(expr value, expr slice, expr_context ctx, int aware)\n"
         "     | Starred(expr value, expr_context ctx)\n"
         "     | Name(identifier id, expr_context ctx)\n"
         "     | List(expr* elts, expr_context ctx)\n"
@@ -1509,8 +1514,8 @@ init_types(struct ast_state *state)
         "Compare(expr left, cmpop* ops, expr* comparators)");
     if (!state->Compare_type) return 0;
     state->Call_type = make_type(state, "Call", state->expr_type, Call_fields,
-                                 3,
-        "Call(expr func, expr* args, keyword* keywords)");
+                                 4,
+        "Call(expr func, expr* args, keyword* keywords, int aware)");
     if (!state->Call_type) return 0;
     state->FormattedValue_type = make_type(state, "FormattedValue",
                                            state->expr_type,
@@ -1535,12 +1540,12 @@ init_types(struct ast_state *state)
         "Template(int last)");
     if (!state->Template_type) return 0;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
-                                      Attribute_fields, 3,
-        "Attribute(expr value, identifier attr, expr_context ctx)");
+                                      Attribute_fields, 4,
+        "Attribute(expr value, identifier attr, expr_context ctx, int aware)");
     if (!state->Attribute_type) return 0;
     state->Subscript_type = make_type(state, "Subscript", state->expr_type,
-                                      Subscript_fields, 3,
-        "Subscript(expr value, expr slice, expr_context ctx)");
+                                      Subscript_fields, 4,
+        "Subscript(expr value, expr slice, expr_context ctx, int aware)");
     if (!state->Subscript_type) return 0;
     state->Starred_type = make_type(state, "Starred", state->expr_type,
                                     Starred_fields, 2,
@@ -3262,8 +3267,8 @@ _PyAST_Compare(expr_ty left, asdl_int_seq * ops, asdl_expr_seq * comparators,
 
 expr_ty
 _PyAST_Call(expr_ty func, asdl_expr_seq * args, asdl_keyword_seq * keywords,
-            int lineno, int col_offset, int end_lineno, int end_col_offset,
-            PyArena *arena)
+            int aware, int lineno, int col_offset, int end_lineno, int
+            end_col_offset, PyArena *arena)
 {
     expr_ty p;
     if (!func) {
@@ -3278,6 +3283,7 @@ _PyAST_Call(expr_ty func, asdl_expr_seq * args, asdl_keyword_seq * keywords,
     p->v.Call.func = func;
     p->v.Call.args = args;
     p->v.Call.keywords = keywords;
+    p->v.Call.aware = aware;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -3369,8 +3375,8 @@ _PyAST_Template(int last, int lineno, int col_offset, int end_lineno, int
 
 expr_ty
 _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
-                 lineno, int col_offset, int end_lineno, int end_col_offset,
-                 PyArena *arena)
+                 aware, int lineno, int col_offset, int end_lineno, int
+                 end_col_offset, PyArena *arena)
 {
     expr_ty p;
     if (!value) {
@@ -3395,6 +3401,7 @@ _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
     p->v.Attribute.value = value;
     p->v.Attribute.attr = attr;
     p->v.Attribute.ctx = ctx;
+    p->v.Attribute.aware = aware;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -3403,9 +3410,9 @@ _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
 }
 
 expr_ty
-_PyAST_Subscript(expr_ty value, expr_ty slice, expr_context_ty ctx, int lineno,
-                 int col_offset, int end_lineno, int end_col_offset, PyArena
-                 *arena)
+_PyAST_Subscript(expr_ty value, expr_ty slice, expr_context_ty ctx, int aware,
+                 int lineno, int col_offset, int end_lineno, int
+                 end_col_offset, PyArena *arena)
 {
     expr_ty p;
     if (!value) {
@@ -3430,6 +3437,7 @@ _PyAST_Subscript(expr_ty value, expr_ty slice, expr_context_ty ctx, int lineno,
     p->v.Subscript.value = value;
     p->v.Subscript.slice = slice;
     p->v.Subscript.ctx = ctx;
+    p->v.Subscript.aware = aware;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -4993,6 +5001,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         if (PyObject_SetAttr(result, state->keywords, value) == -1)
             goto failed;
         Py_DECREF(value);
+        value = ast2obj_int(state, o->v.Call.aware);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->aware, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         break;
     case FormattedValue_kind:
         tp = (PyTypeObject *)state->FormattedValue_type;
@@ -5069,6 +5082,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         if (PyObject_SetAttr(result, state->ctx, value) == -1)
             goto failed;
         Py_DECREF(value);
+        value = ast2obj_int(state, o->v.Attribute.aware);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->aware, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         break;
     case Subscript_kind:
         tp = (PyTypeObject *)state->Subscript_type;
@@ -5087,6 +5105,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         value = ast2obj_expr_context(state, o->v.Subscript.ctx);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->ctx, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_int(state, o->v.Subscript.aware);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->aware, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -10180,6 +10203,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         expr_ty func;
         asdl_expr_seq* args;
         asdl_keyword_seq* keywords;
+        int aware;
 
         if (PyObject_GetOptionalAttr(obj, state->func, &tmp) < 0) {
             return 1;
@@ -10274,7 +10298,24 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             }
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Call(func, args, keywords, lineno, col_offset,
+        if (PyObject_GetOptionalAttr(obj, state->aware, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"aware\" missing from Call");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Call' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &aware, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Call(func, args, keywords, aware, lineno, col_offset,
                            end_lineno, end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
@@ -10484,6 +10525,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         expr_ty value;
         identifier attr;
         expr_context_ty ctx;
+        int aware;
 
         if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
             return 1;
@@ -10536,7 +10578,24 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Attribute(value, attr, ctx, lineno, col_offset,
+        if (PyObject_GetOptionalAttr(obj, state->aware, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"aware\" missing from Attribute");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Attribute' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &aware, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Attribute(value, attr, ctx, aware, lineno, col_offset,
                                 end_lineno, end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
@@ -10550,6 +10609,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         expr_ty value;
         expr_ty slice;
         expr_context_ty ctx;
+        int aware;
 
         if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
             return 1;
@@ -10602,7 +10662,24 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Subscript(value, slice, ctx, lineno, col_offset,
+        if (PyObject_GetOptionalAttr(obj, state->aware, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"aware\" missing from Subscript");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Subscript' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &aware, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Subscript(value, slice, ctx, aware, lineno, col_offset,
                                 end_lineno, end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;

@@ -217,6 +217,10 @@
 
    Token value for ``"|>="``.
 
+.. data:: QMARK
+
+   Token value for ``"?"``.
+
 .. data:: DOUBLEQMARK
 
    Token value for ``"??"``.

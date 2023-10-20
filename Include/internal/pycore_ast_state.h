@@ -182,6 +182,7 @@ struct ast_state {
     PyObject *asname;
     PyObject *ast;
     PyObject *attr;
+    PyObject *aware;
     PyObject *bases;
     PyObject *body;
     PyObject *boolop_type;

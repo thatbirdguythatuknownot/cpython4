@@ -565,7 +565,7 @@ value_pattern[pattern_ty]:
 
 attr[expr_ty]:
     | value=name_or_attr '.' attr=NAME {
-        _PyAST_Attribute(value, attr->v.Name.id, Load, EXTRA) }
+        _PyAST_Attribute(value, attr->v.Name.id, Load, 0, EXTRA) }
 
 name_or_attr[expr_ty]:
     | attr
@@ -857,14 +857,20 @@ await_primary[expr_ty] (memo):
     | primary
 
 primary[expr_ty]:
-    | a=primary '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, EXTRA) }
-    | a=primary b=(genexp | tuplecomp | slice_literal) { _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
-    | a=primary '(' b=[arguments] ')' {
+    | a=primary n='?'? '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
+    | a=primary n='?'? b=(genexp | tuplecomp | slice_literal) {
+        _PyAST_Call(a,
+                    CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)),
+                    NULL,
+                    n != NULL,
+                    EXTRA) }
+    | a=primary n='?'? '(' b=[arguments] ')' {
         _PyAST_Call(a,
                  (b) ? ((expr_ty) b)->v.Call.args : NULL,
                  (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
+                 n != NULL,
                  EXTRA) }
-    | a=primary '[' b=slices ']' { _PyAST_Subscript(a, b, Load, EXTRA) }
+    | a=primary n='?'? '[' b=slices ']' { _PyAST_Subscript(a, b, Load, n != NULL, EXTRA) }
     | atom
 
 slices[expr_ty]:
@@ -1054,6 +1060,7 @@ args[expr_ty]:
     | a=kwargs { _PyAST_Call(_PyPegen_dummy_name(p),
                           CHECK_NULL_ALLOWED(asdl_expr_seq*, _PyPegen_seq_extract_starred_exprs(p, a)),
                           CHECK_NULL_ALLOWED(asdl_keyword_seq*, _PyPegen_seq_delete_starred_exprs(p, a)),
+                          0,
                           EXTRA) }
 
 kwargs[asdl_seq*]:
@@ -1101,8 +1108,8 @@ star_target[expr_ty] (memo):
     | target_with_star_atom
 
 target_with_star_atom[expr_ty] (memo):
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, EXTRA) }
+    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, 0, EXTRA) }
+    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, 0, EXTRA) }
     | star_atom
 
 star_atom[expr_ty]:
@@ -1117,18 +1124,19 @@ single_target[expr_ty]:
     | '(' a=single_target ')' { a }
 
 single_subscript_attribute_target[expr_ty]:
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, EXTRA) }
+    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Store, 0, EXTRA) }
+    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Store, 0, EXTRA) }
 
 t_primary[expr_ty]:
-    | a=t_primary '.' b=NAME &t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Load, EXTRA) }
-    | a=t_primary '[' b=slices ']' &t_lookahead { _PyAST_Subscript(a, b, Load, EXTRA) }
-    | a=t_primary b=genexp &t_lookahead {
-        _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, EXTRA) }
-    | a=t_primary '(' b=[arguments] ')' &t_lookahead {
+    | a=t_primary n='?'? '.' b=NAME &t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
+    | a=t_primary n='?'? '[' b=slices ']' &t_lookahead { _PyAST_Subscript(a, b, Load, n != NULL, EXTRA) }
+    | a=t_primary n='?'? b=(genexp | tuplecomp | slice_literal) &t_lookahead {
+        _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, n != NULL, EXTRA) }
+    | a=t_primary n='?'? '(' b=[arguments] ')' &t_lookahead {
         _PyAST_Call(a,
                  (b) ? ((expr_ty) b)->v.Call.args : NULL,
                  (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
+                 n != NULL,
                  EXTRA) }
     | a=atom &t_lookahead { a }
 
@@ -1140,8 +1148,8 @@ t_lookahead: '(' | '[' | '.'
 del_targets[asdl_expr_seq*]: a[asdl_expr_seq*]=','.del_target+ [','] { a }
 
 del_target[expr_ty] (memo):
-    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Del, EXTRA) }
-    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Del, EXTRA) }
+    | a=t_primary '.' b=NAME !t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Del, 0, EXTRA) }
+    | a=t_primary '[' b=slices ']' !t_lookahead { _PyAST_Subscript(a, b, Del, 0, EXTRA) }
     | del_t_atom
 
 del_t_atom[expr_ty]:

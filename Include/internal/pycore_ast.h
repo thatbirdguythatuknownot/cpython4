@@ -471,6 +471,7 @@ struct _expr {
             expr_ty func;
             asdl_expr_seq *args;
             asdl_keyword_seq *keywords;
+            int aware;
         } Call;
 
         struct {
@@ -496,12 +497,14 @@ struct _expr {
             expr_ty value;
             identifier attr;
             expr_context_ty ctx;
+            int aware;
         } Attribute;
 
         struct {
             expr_ty value;
             expr_ty slice;
             expr_context_ty ctx;
+            int aware;
         } Subscript;
 
         struct {
@@ -846,8 +849,8 @@ expr_ty _PyAST_Compare(expr_ty left, asdl_int_seq * ops, asdl_expr_seq *
                        comparators, int lineno, int col_offset, int end_lineno,
                        int end_col_offset, PyArena *arena);
 expr_ty _PyAST_Call(expr_ty func, asdl_expr_seq * args, asdl_keyword_seq *
-                    keywords, int lineno, int col_offset, int end_lineno, int
-                    end_col_offset, PyArena *arena);
+                    keywords, int aware, int lineno, int col_offset, int
+                    end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_FormattedValue(expr_ty value, int conversion, expr_ty
                               format_spec, int lineno, int col_offset, int
                               end_lineno, int end_col_offset, PyArena *arena);
@@ -859,10 +862,10 @@ expr_ty _PyAST_Constant(constant value, string kind, int lineno, int
 expr_ty _PyAST_Template(int last, int lineno, int col_offset, int end_lineno,
                         int end_col_offset, PyArena *arena);
 expr_ty _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx,
-                         int lineno, int col_offset, int end_lineno, int
-                         end_col_offset, PyArena *arena);
+                         int aware, int lineno, int col_offset, int end_lineno,
+                         int end_col_offset, PyArena *arena);
 expr_ty _PyAST_Subscript(expr_ty value, expr_ty slice, expr_context_ty ctx, int
-                         lineno, int col_offset, int end_lineno, int
+                         aware, int lineno, int col_offset, int end_lineno, int
                          end_col_offset, PyArena *arena);
 expr_ty _PyAST_Starred(expr_ty value, expr_context_ty ctx, int lineno, int
                        col_offset, int end_lineno, int end_col_offset, PyArena

@@ -57,6 +57,7 @@ EXCLAMATION             '!'
 PIPEGT                  '|>'
 DOLLAR                  '$'
 PIPEGTEQUAL             '|>='
+QMARK                   '?'
 DOUBLEQMARK             '??'
 DOUBLEQMARKEQUAL        '??='
 

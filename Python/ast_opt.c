@@ -1092,8 +1092,19 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_SEQ(astfold_expr, expr, node_->v.Compare.comparators);
         CALL(fold_compare, expr_ty, node_);
         break;
+#define NONE_CHECK(K, F) \
+    if (node_->v.K.aware) { \
+        expr_ty e = node_->v.K.F; \
+        if (e->kind == Constant_kind && \
+            Py_Is(e->v.Constant.value, Py_None)) \
+        { \
+            COPY_NODE(node_, e); \
+        } \
+    }
+
     case Call_kind:
         CALL(astfold_expr, expr_ty, node_->v.Call.func);
+        NONE_CHECK(Call, func)
         CALL_SEQ(astfold_expr, expr, node_->v.Call.args);
         CALL_SEQ(astfold_keyword, keyword, node_->v.Call.keywords);
         break;
@@ -1106,9 +1117,11 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         break;
     case Attribute_kind:
         CALL(astfold_expr, expr_ty, node_->v.Attribute.value);
+        NONE_CHECK(Attribute, value)
         break;
     case Subscript_kind:
         CALL(astfold_expr, expr_ty, node_->v.Subscript.value);
+        NONE_CHECK(Subscript, value)
         CALL(astfold_expr, expr_ty, node_->v.Subscript.slice);
         CALL(fold_subscr, expr_ty, node_);
         break;

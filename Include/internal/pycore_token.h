@@ -71,19 +71,20 @@ extern "C" {
 #define PIPEGT          55
 #define DOLLAR          56
 #define PIPEGTEQUAL     57
-#define DOUBLEQMARK     58
-#define DOUBLEQMARKEQUAL 59
-#define OP              60
-#define TYPE_IGNORE     61
-#define TYPE_COMMENT    62
-#define SOFT_KEYWORD    63
-#define FSTRING_START   64
-#define FSTRING_MIDDLE  65
-#define FSTRING_END     66
-#define COMMENT         67
-#define NL              68
-#define ERRORTOKEN      69
-#define N_TOKENS        71
+#define QMARK           58
+#define DOUBLEQMARK     59
+#define DOUBLEQMARKEQUAL 60
+#define OP              61
+#define TYPE_IGNORE     62
+#define TYPE_COMMENT    63
+#define SOFT_KEYWORD    64
+#define FSTRING_START   65
+#define FSTRING_MIDDLE  66
+#define FSTRING_END     67
+#define COMMENT         68
+#define NL              69
+#define ERRORTOKEN      70
+#define N_TOKENS        72
 #define NT_OFFSET       256
 
 /* Special definitions for cooperation with parser */

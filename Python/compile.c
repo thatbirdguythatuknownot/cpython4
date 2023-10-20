@@ -437,10 +437,11 @@ static int compiler_nameop(struct compiler *, location, identifier, expr_context
 static PyCodeObject *compiler_mod(struct compiler *, mod_ty);
 static int compiler_visit_stmt(struct compiler *, stmt_ty);
 static int compiler_visit_keyword(struct compiler *, keyword_ty);
+static int compiler_visit_noneaware(struct compiler *, expr_ty, jump_target_label);
 static int compiler_visit_expr(struct compiler *, expr_ty);
 static int compiler_augassign(struct compiler *, stmt_ty);
 static int compiler_annassign(struct compiler *, stmt_ty);
-static int compiler_subscript(struct compiler *, expr_ty);
+static int compiler_subscript(struct compiler *, expr_ty, jump_target_label);
 static int compiler_slice(struct compiler *, expr_ty);
 
 static bool are_all_items_const(asdl_expr_seq *, Py_ssize_t, Py_ssize_t);
@@ -5014,8 +5015,9 @@ update_start_location_to_match_attr(struct compiler *c, location loc,
 
 // Return 1 if the method call was optimized, 0 if not, and -1 on error.
 static int
-maybe_optimize_method_call(struct compiler *c, expr_ty e)
+maybe_optimize_method_call(struct compiler *c, expr_ty e, jump_target_label l)
 {
+    int made_here;
     Py_ssize_t argsl, i, kwdsl;
     expr_ty meth = e->v.Call.func;
     asdl_expr_seq *args = e->v.Call.args;
@@ -5063,7 +5065,15 @@ maybe_optimize_method_call(struct compiler *c, expr_ty e)
         loc = update_start_location_to_match_attr(c, loc, meth);
         ADDOP(c, loc, NOP);
     } else {
-        VISIT(c, expr, meth->v.Attribute.value);
+        if ((made_here = e->v.Call.aware && !IS_LABEL(l))) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
+        compiler_visit_noneaware(c, meth->v.Attribute.value, l);
+        if (e->v.Call.aware) {
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        }
         loc = update_start_location_to_match_attr(c, loc, meth);
         ADDOP_NAME(c, loc, LOAD_METHOD, meth->v.Attribute.attr, names);
     }
@@ -5077,6 +5087,9 @@ maybe_optimize_method_call(struct compiler *c, expr_ty e)
     }
     loc = update_start_location_to_match_attr(c, LOC(e), meth);
     ADDOP_I(c, loc, CALL, argsl + kwdsl);
+    if (made_here) {
+        USE_LABEL(c, l);
+    }
     return 1;
 }
 
@@ -5105,10 +5118,12 @@ validate_keywords(struct compiler *c, asdl_keyword_seq *keywords)
 }
 
 static int
-compiler_call(struct compiler *c, expr_ty e)
+compiler_call(struct compiler *c, expr_ty e, jump_target_label l)
 {
+    int made_here;
+
     RETURN_IF_ERROR(validate_keywords(c, e->v.Call.keywords));
-    int ret = maybe_optimize_method_call(c, e);
+    int ret = maybe_optimize_method_call(c, e, l);
     if (ret < 0) {
         return ERROR;
     }
@@ -5116,13 +5131,25 @@ compiler_call(struct compiler *c, expr_ty e)
         return SUCCESS;
     }
     RETURN_IF_ERROR(check_caller(c, e->v.Call.func));
-    VISIT(c, expr, e->v.Call.func);
+    if ((made_here = e->v.Call.aware && !IS_LABEL(l))) {
+        NEW_JUMP_TARGET_LABEL(c, l2);
+        l = l2;
+    }
+    compiler_visit_noneaware(c, e->v.Call.func, l);
     location loc = LOC(e->v.Call.func);
+    if (e->v.Call.aware) {
+        ADDOP_I(c, loc, COPY, 1);
+        ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+    }
     ADDOP(c, loc, PUSH_NULL);
     loc = LOC(e);
-    return compiler_call_helper(c, loc, 0,
-                                e->v.Call.args,
-                                e->v.Call.keywords);
+    RETURN_IF_ERROR(compiler_call_helper(c, loc, 0,
+                                         e->v.Call.args,
+                                         e->v.Call.keywords));
+    if (made_here) {
+        USE_LABEL(c, l);
+    }
+    return SUCCESS;
 }
 
 static int
@@ -6230,6 +6257,60 @@ compiler_template(struct compiler *c, expr_ty e)
 }
 
 static int
+compiler_visit_noneaware(struct compiler *c, expr_ty e, jump_target_label l)
+{
+    int made_here;
+    location loc = LOC(e);
+    switch (e->kind) {
+    case Attribute_kind:
+        if (e->v.Attribute.ctx == Load && can_optimize_super_call(c, e)) {
+            RETURN_IF_ERROR(load_args_for_super(c, e->v.Attribute.value));
+            int opcode = asdl_seq_LEN(e->v.Attribute.value->v.Call.args) ?
+                LOAD_SUPER_ATTR : LOAD_ZERO_SUPER_ATTR;
+            ADDOP_NAME(c, loc, opcode, e->v.Attribute.attr, names);
+            loc = update_start_location_to_match_attr(c, loc, e);
+            ADDOP(c, loc, NOP);
+            return SUCCESS;
+        }
+        if ((made_here = e->v.Attribute.aware && !IS_LABEL(l))) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
+        compiler_visit_noneaware(c, e->v.Attribute.value, l);
+        if (e->v.Attribute.aware) {
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        }
+        loc = update_start_location_to_match_attr(c, loc, e);
+        switch (e->v.Attribute.ctx) {
+        case Load:
+            ADDOP_NAME(c, loc, LOAD_ATTR, e->v.Attribute.attr, names);
+            break;
+        case Store:
+            if (forbidden_name(c, loc, e->v.Attribute.attr, e->v.Attribute.ctx)) {
+                return ERROR;
+            }
+            ADDOP_NAME(c, loc, STORE_ATTR, e->v.Attribute.attr, names);
+            break;
+        case Del:
+            ADDOP_NAME(c, loc, DELETE_ATTR, e->v.Attribute.attr, names);
+            break;
+        }
+        if (made_here) {
+            USE_LABEL(c, l);
+        }
+        break;
+    case Call_kind:
+        return compiler_call(c, e, l);
+    case Subscript_kind:
+        return compiler_subscript(c, e, l);
+    default:
+        VISIT(c, expr, e);
+    }
+    return SUCCESS;
+}
+
+static int
 compiler_visit_expr1(struct compiler *c, expr_ty e)
 {
     location loc = LOC(e);
@@ -6245,9 +6326,9 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         VISIT(c, expr, e->v.BinOp.left);
         if (e->v.BinOp.op == Clsc) {
             NEW_JUMP_TARGET_LABEL(c, label);
-            ADDOP_I(c, LOC(e), COPY, 1);
-            ADDOP_JUMP(c, LOC(e), POP_JUMP_IF_NOT_NONE, label);
-            ADDOP(c, LOC(e), POP_TOP);
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NOT_NONE, label);
+            ADDOP(c, loc, POP_TOP);
             VISIT(c, expr, e->v.BinOp.right);
             USE_LABEL(c, label);
         }
@@ -6319,8 +6400,6 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         break;
     case Compare_kind:
         return compiler_compare(c, e);
-    case Call_kind:
-        return compiler_call(c, e);
     case Constant_kind:
         ADDOP_LOAD_CONST(c, loc, e->v.Constant.value);
         break;
@@ -6328,37 +6407,15 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_joined_str(c, e);
     case FormattedValue_kind:
         return compiler_formatted_value(c, e);
+    case Composition_kind:
+        return compiler_composition(c, e);
+    case Template_kind:
+        return compiler_template(c, e);
+    case Call_kind:
     /* The following exprs can be assignment targets. */
     case Attribute_kind:
-        if (e->v.Attribute.ctx == Load && can_optimize_super_call(c, e)) {
-            RETURN_IF_ERROR(load_args_for_super(c, e->v.Attribute.value));
-            int opcode = asdl_seq_LEN(e->v.Attribute.value->v.Call.args) ?
-                LOAD_SUPER_ATTR : LOAD_ZERO_SUPER_ATTR;
-            ADDOP_NAME(c, loc, opcode, e->v.Attribute.attr, names);
-            loc = update_start_location_to_match_attr(c, loc, e);
-            ADDOP(c, loc, NOP);
-            return SUCCESS;
-        }
-        VISIT(c, expr, e->v.Attribute.value);
-        loc = LOC(e);
-        loc = update_start_location_to_match_attr(c, loc, e);
-        switch (e->v.Attribute.ctx) {
-        case Load:
-            ADDOP_NAME(c, loc, LOAD_ATTR, e->v.Attribute.attr, names);
-            break;
-        case Store:
-            if (forbidden_name(c, loc, e->v.Attribute.attr, e->v.Attribute.ctx)) {
-                return ERROR;
-            }
-            ADDOP_NAME(c, loc, STORE_ATTR, e->v.Attribute.attr, names);
-            break;
-        case Del:
-            ADDOP_NAME(c, loc, DELETE_ATTR, e->v.Attribute.attr, names);
-            break;
-        }
-        break;
     case Subscript_kind:
-        return compiler_subscript(c, e);
+        return compiler_visit_noneaware(c, e, NO_LABEL);
     case Starred_kind:
         switch (e->v.Starred.ctx) {
         case Store:
@@ -6385,10 +6442,6 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_list(c, e);
     case Tuple_kind:
         return compiler_tuple(c, e);
-    case Composition_kind:
-        return compiler_composition(c, e);
-    case Template_kind:
-        return compiler_template(c, e);
     }
     return SUCCESS;
 }
@@ -6696,8 +6749,9 @@ compiler_warn(struct compiler *c, location loc,
 }
 
 static int
-compiler_subscript(struct compiler *c, expr_ty e)
+compiler_subscript(struct compiler *c, expr_ty e, jump_target_label l)
 {
+    int made_here;
     location loc = LOC(e);
     expr_context_ty ctx = e->v.Subscript.ctx;
     int op = 0;
@@ -6707,7 +6761,16 @@ compiler_subscript(struct compiler *c, expr_ty e)
         RETURN_IF_ERROR(check_index(c, e->v.Subscript.value, e->v.Subscript.slice));
     }
 
-    VISIT(c, expr, e->v.Subscript.value);
+    if ((made_here = e->v.Subscript.aware && !IS_LABEL(l))) {
+        NEW_JUMP_TARGET_LABEL(c, l2);
+        l = l2;
+    }
+    compiler_visit_noneaware(c, e->v.Subscript.value, l);
+    if (e->v.Subscript.aware) {
+        ADDOP_I(c, loc, COPY, 1);
+        ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+    }
+
     if (is_two_element_slice(e->v.Subscript.slice) && ctx != Del) {
         RETURN_IF_ERROR(compiler_slice(c, e->v.Subscript.slice));
         if (ctx == Load) {
@@ -6727,6 +6790,10 @@ compiler_subscript(struct compiler *c, expr_ty e)
         }
         assert(op);
         ADDOP(c, loc, op);
+    }
+
+    if (made_here) {
+        USE_LABEL(c, l);
     }
     return SUCCESS;
 }

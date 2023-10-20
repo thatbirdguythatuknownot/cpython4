@@ -332,14 +332,14 @@ static expr_ty
 _set_subscript_context(Parser *p, expr_ty e, expr_context_ty ctx)
 {
     return _PyAST_Subscript(e->v.Subscript.value, e->v.Subscript.slice,
-                            ctx, EXTRA_EXPR(e, e));
+                            ctx, e->v.Subscript.aware, EXTRA_EXPR(e, e));
 }
 
 static expr_ty
 _set_attribute_context(Parser *p, expr_ty e, expr_context_ty ctx)
 {
     return _PyAST_Attribute(e->v.Attribute.value, e->v.Attribute.attr,
-                            ctx, EXTRA_EXPR(e, e));
+                            ctx, e->v.Attribute.aware, EXTRA_EXPR(e, e));
 }
 
 static expr_ty
@@ -1124,7 +1124,7 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
     Py_ssize_t total_len = args_len;
 
     if (b == NULL) {
-        return _PyAST_Call(_PyPegen_dummy_name(p), a, NULL, lineno, col_offset,
+        return _PyAST_Call(_PyPegen_dummy_name(p), a, NULL, 0, lineno, col_offset,
                         end_lineno, end_col_offset, arena);
 
     }
@@ -1146,7 +1146,7 @@ expr_ty _PyPegen_collect_call_seqs(Parser *p, asdl_expr_seq *a, asdl_seq *b,
         asdl_seq_SET(args, i, asdl_seq_GET(starreds, i - args_len));
     }
 
-    return _PyAST_Call(_PyPegen_dummy_name(p), args, keywords, lineno,
+    return _PyAST_Call(_PyPegen_dummy_name(p), args, keywords, 0, lineno,
                        col_offset, end_lineno, end_col_offset, arena);
 }
 

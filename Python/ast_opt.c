@@ -1169,7 +1169,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 static int
 astfold_keyword(keyword_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
-    CALL(astfold_expr, expr_ty, node_->value);
+    CALL_OPT(astfold_expr, expr_ty, node_->value);
     return 1;
 }
 

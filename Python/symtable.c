@@ -1948,6 +1948,26 @@ symtable_handle_namedexpr(struct symtable *st, expr_ty e)
 }
 
 static int
+symtable_name(struct symtable *st, identifier name, expr_context_ty ctx,
+              int lineno, int col_offset, int end_lineno, int end_col_offset)
+{
+    if (!symtable_add_def(st, name,
+                          ctx == Load ? USE : DEF_LOCAL,
+                          lineno, col_offset, end_lineno, end_col_offset))
+        return 0;
+    /* Special-case super: it counts as a use of __class__ */
+    if (ctx == Load &&
+        _PyST_IsFunctionLike(st->st_cur) &&
+        _PyUnicode_EqualToASCIIString(name, "super")) {
+        if (!symtable_add_def(st, &_Py_ID(__class__), USE,
+                              lineno, col_offset,
+                              end_lineno, end_col_offset))
+            return 0;
+    }
+    return 1;
+}
+
+static int
 symtable_visit_expr(struct symtable *st, expr_ty e)
 {
     if (++st->recursion_depth > st->recursion_limit) {
@@ -2089,16 +2109,8 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
             VISIT(st, expr, e->v.Slice.step)
         break;
     case Name_kind:
-        if (!symtable_add_def(st, e->v.Name.id,
-                              e->v.Name.ctx == Load ? USE : DEF_LOCAL, LOCATION(e)))
+        if (!symtable_name(st, e->v.Name.id, e->v.Name.ctx, LOCATION(e)))
             VISIT_QUIT(st, 0);
-        /* Special-case super: it counts as a use of __class__ */
-        if (e->v.Name.ctx == Load &&
-            _PyST_IsFunctionLike(st->st_cur) &&
-            _PyUnicode_EqualToASCIIString(e->v.Name.id, "super")) {
-            if (!symtable_add_def(st, &_Py_ID(__class__), USE, LOCATION(e)))
-                VISIT_QUIT(st, 0);
-        }
         break;
     /* child nodes of List and Tuple will have expr_context set */
     case List_kind:
@@ -2423,8 +2435,12 @@ symtable_visit_comprehension(struct symtable *st, comprehension_ty lc)
 static int
 symtable_visit_keyword(struct symtable *st, keyword_ty k)
 {
-    VISIT(st, expr, k->value);
-    return 1;
+    if (k->value) {
+        VISIT(st, expr, k->value);
+        return 1;
+    }
+
+    return symtable_name(st, k->arg, Load, LOCATION(k));
 }
 
 

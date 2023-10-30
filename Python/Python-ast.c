@@ -1887,11 +1887,13 @@ init_types(struct ast_state *state)
         return 0;
     state->keyword_type = make_type(state, "keyword", state->AST_type,
                                     keyword_fields, 2,
-        "keyword(identifier? arg, expr value)");
+        "keyword(identifier? arg, expr? value)");
     if (!state->keyword_type) return 0;
     if (!add_attributes(state, state->keyword_type, keyword_attributes, 4))
         return 0;
     if (PyObject_SetAttr(state->keyword_type, state->arg, Py_None) == -1)
+        return 0;
+    if (PyObject_SetAttr(state->keyword_type, state->value, Py_None) == -1)
         return 0;
     if (PyObject_SetAttr(state->keyword_type, state->end_lineno, Py_None) == -1)
         return 0;
@@ -3659,11 +3661,6 @@ _PyAST_keyword(identifier arg, expr_ty value, int lineno, int col_offset, int
                end_lineno, int end_col_offset, PyArena *arena)
 {
     keyword_ty p;
-    if (!value) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'value' is required for keyword");
-        return NULL;
-    }
     p = (keyword_ty)_PyArena_Malloc(arena, sizeof(*p));
     if (!p)
         return NULL;
@@ -12046,9 +12043,9 @@ obj2ast_keyword(struct ast_state *state, PyObject* obj, keyword_ty* out,
     if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
         return 1;
     }
-    if (tmp == NULL) {
-        PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from keyword");
-        return 1;
+    if (tmp == NULL || tmp == Py_None) {
+        Py_CLEAR(tmp);
+        value = NULL;
     }
     else {
         int res;

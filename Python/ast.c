@@ -87,9 +87,11 @@ static int
 validate_keywords(struct validator *state, asdl_keyword_seq *keywords)
 {
     assert(!PyErr_Occurred());
-    for (Py_ssize_t i = 0; i < asdl_seq_LEN(keywords); i++)
-        if (!validate_expr(state, (asdl_seq_GET(keywords, i))->value, Load))
+    for (Py_ssize_t i = 0; i < asdl_seq_LEN(keywords); i++) {
+        keyword_ty k = asdl_seq_GET(keywords, i);
+        if (k->value && !validate_expr(state, k->value, Load))
             return 0;
+    }
     return 1;
 }
 

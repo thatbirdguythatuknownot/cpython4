@@ -1040,9 +1040,9 @@ _PyPegen_get_expr_name(expr_ty e)
     assert(e != NULL);
     switch (e->kind) {
         case Attribute_kind:
-            return "attribute";
+            return e->v.Attribute.aware ? "attribute" : "safe attribute";
         case Subscript_kind:
-            return "subscript";
+            return e->v.Subscript.aware ? "subscript" : "safe subscript";
         case Starred_kind:
             return "starred";
         case Name_kind:
@@ -1054,7 +1054,7 @@ _PyPegen_get_expr_name(expr_ty e)
         case Lambda_kind:
             return "lambda";
         case Call_kind:
-            return "function call";
+            return e->v.Call.aware ? "function call" : "safe function call";
         case BoolOp_kind:
         case BinOp_kind:
         case UnaryOp_kind:

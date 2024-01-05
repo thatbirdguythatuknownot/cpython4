@@ -732,7 +732,7 @@ range_bool(rangeobject* self)
 }
 
 static PyNumberMethods range_as_number = {
-    .nb_bool = (inquiry)range_bool,
+    .nb_bool = (inquiry)range_bool
 };
 
 static PyObject * range_iter(PyObject *seq);

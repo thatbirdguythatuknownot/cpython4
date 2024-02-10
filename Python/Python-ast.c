@@ -160,6 +160,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Sub_singleton);
     Py_CLEAR(state->Sub_type);
     Py_CLEAR(state->Subscript_type);
+    Py_CLEAR(state->Switch_type);
     Py_CLEAR(state->Template_type);
     Py_CLEAR(state->TryStar_type);
     Py_CLEAR(state->Try_type);
@@ -269,6 +270,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->step);
     Py_CLEAR(state->stmt_type);
     Py_CLEAR(state->subject);
+    Py_CLEAR(state->switch_case_type);
     Py_CLEAR(state->tag);
     Py_CLEAR(state->target);
     Py_CLEAR(state->targets);
@@ -398,6 +400,7 @@ GENERATE_ASDL_SEQ_CONSTRUCTOR(arg, arg_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(keyword, keyword_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(alias, alias_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(withitem, withitem_ty)
+GENERATE_ASDL_SEQ_CONSTRUCTOR(switch_case, switch_case_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(match_case, match_case_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(pattern, pattern_ty)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(type_ignore, type_ignore_ty)
@@ -511,6 +514,10 @@ static const char * const AsyncWith_fields[]={
     "items",
     "body",
     "type_comment",
+};
+static const char * const Switch_fields[]={
+    "subject",
+    "cases",
 };
 static const char * const Match_fields[]={
     "subject",
@@ -764,6 +771,11 @@ static PyObject* ast2obj_withitem(struct ast_state *state, void*);
 static const char * const withitem_fields[]={
     "context_expr",
     "optional_vars",
+};
+static PyObject* ast2obj_switch_case(struct ast_state *state, void*);
+static const char * const switch_case_fields[]={
+    "patterns",
+    "body",
 };
 static PyObject* ast2obj_match_case(struct ast_state *state, void*);
 static const char * const match_case_fields[]={
@@ -1222,6 +1234,7 @@ init_types(struct ast_state *state)
         "     | If(expr test, stmt* body, stmt* orelse)\n"
         "     | With(withitem* items, stmt* body, string? type_comment)\n"
         "     | AsyncWith(withitem* items, stmt* body, string? type_comment)\n"
+        "     | Switch(expr subject, switch_case* cases)\n"
         "     | Match(expr subject, match_case* cases)\n"
         "     | Raise(expr? exc, expr? cause)\n"
         "     | Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)\n"
@@ -1334,6 +1347,10 @@ init_types(struct ast_state *state)
     if (PyObject_SetAttr(state->AsyncWith_type, state->type_comment, Py_None)
         == -1)
         return 0;
+    state->Switch_type = make_type(state, "Switch", state->stmt_type,
+                                   Switch_fields, 2,
+        "Switch(expr subject, switch_case* cases)");
+    if (!state->Switch_type) return 0;
     state->Match_type = make_type(state, "Match", state->stmt_type,
                                   Match_fields, 2,
         "Match(expr subject, match_case* cases)");
@@ -1921,6 +1938,11 @@ init_types(struct ast_state *state)
     if (PyObject_SetAttr(state->withitem_type, state->optional_vars, Py_None)
         == -1)
         return 0;
+    state->switch_case_type = make_type(state, "switch_case", state->AST_type,
+                                        switch_case_fields, 2,
+        "switch_case(expr* patterns, stmt* body)");
+    if (!state->switch_case_type) return 0;
+    if (!add_attributes(state, state->switch_case_type, NULL, 0)) return 0;
     state->match_case_type = make_type(state, "match_case", state->AST_type,
                                        match_case_fields, 3,
         "match_case(pattern pattern, expr? guard, stmt* body)");
@@ -2056,6 +2078,8 @@ static int obj2ast_alias(struct ast_state *state, PyObject* obj, alias_ty* out,
                          PyArena* arena);
 static int obj2ast_withitem(struct ast_state *state, PyObject* obj,
                             withitem_ty* out, PyArena* arena);
+static int obj2ast_switch_case(struct ast_state *state, PyObject* obj,
+                               switch_case_ty* out, PyArena* arena);
 static int obj2ast_match_case(struct ast_state *state, PyObject* obj,
                               match_case_ty* out, PyArena* arena);
 static int obj2ast_pattern(struct ast_state *state, PyObject* obj, pattern_ty*
@@ -2523,6 +2547,29 @@ _PyAST_AsyncWith(asdl_withitem_seq * items, asdl_stmt_seq * body, string
     p->v.AsyncWith.items = items;
     p->v.AsyncWith.body = body;
     p->v.AsyncWith.type_comment = type_comment;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+stmt_ty
+_PyAST_Switch(expr_ty subject, asdl_switch_case_seq * cases, int lineno, int
+              col_offset, int end_lineno, int end_col_offset, PyArena *arena)
+{
+    stmt_ty p;
+    if (!subject) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'subject' is required for Switch");
+        return NULL;
+    }
+    p = (stmt_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = Switch_kind;
+    p->v.Switch.subject = subject;
+    p->v.Switch.cases = cases;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -3712,6 +3759,19 @@ _PyAST_withitem(expr_ty context_expr, expr_ty optional_vars, PyArena *arena)
     return p;
 }
 
+switch_case_ty
+_PyAST_switch_case(asdl_expr_seq * patterns, asdl_stmt_seq * body, PyArena
+                   *arena)
+{
+    switch_case_ty p;
+    p = (switch_case_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->patterns = patterns;
+    p->body = body;
+    return p;
+}
+
 match_case_ty
 _PyAST_match_case(pattern_ty pattern, expr_ty guard, asdl_stmt_seq * body,
                   PyArena *arena)
@@ -4447,6 +4507,22 @@ ast2obj_stmt(struct ast_state *state, void* _o)
         value = ast2obj_string(state, o->v.AsyncWith.type_comment);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->type_comment, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
+    case Switch_kind:
+        tp = (PyTypeObject *)state->Switch_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_expr(state, o->v.Switch.subject);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->subject, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_list(state, (asdl_seq*)o->v.Switch.cases,
+                             ast2obj_switch_case);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->cases, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -5688,6 +5764,41 @@ ast2obj_withitem(struct ast_state *state, void* _o)
     value = ast2obj_expr(state, o->optional_vars);
     if (!value) goto failed;
     if (PyObject_SetAttr(result, state->optional_vars, value) == -1)
+        goto failed;
+    Py_DECREF(value);
+    state->recursion_depth--;
+    return result;
+failed:
+    Py_XDECREF(value);
+    Py_XDECREF(result);
+    return NULL;
+}
+
+PyObject*
+ast2obj_switch_case(struct ast_state *state, void* _o)
+{
+    switch_case_ty o = (switch_case_ty)_o;
+    PyObject *result = NULL, *value = NULL;
+    PyTypeObject *tp;
+    if (!o) {
+        Py_RETURN_NONE;
+    }
+    if (++state->recursion_depth > state->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+            "maximum recursion depth exceeded during ast construction");
+        return 0;
+    }
+    tp = (PyTypeObject *)state->switch_case_type;
+    result = PyType_GenericNew(tp, NULL, NULL);
+    if (!result) return NULL;
+    value = ast2obj_list(state, (asdl_seq*)o->patterns, ast2obj_expr);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, state->patterns, value) == -1)
+        goto failed;
+    Py_DECREF(value);
+    value = ast2obj_list(state, (asdl_seq*)o->body, ast2obj_stmt);
+    if (!value) goto failed;
+    if (PyObject_SetAttr(result, state->body, value) == -1)
         goto failed;
     Py_DECREF(value);
     state->recursion_depth--;
@@ -8113,6 +8224,75 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         }
         *out = _PyAST_AsyncWith(items, body, type_comment, lineno, col_offset,
                                 end_lineno, end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
+    tp = state->Switch_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        expr_ty subject;
+        asdl_switch_case_seq* cases;
+
+        if (PyObject_GetOptionalAttr(obj, state->subject, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"subject\" missing from Switch");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Switch' node")) {
+                goto failed;
+            }
+            res = obj2ast_expr(state, tmp, &subject, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        if (PyObject_GetOptionalAttr(obj, state->cases, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            tmp = PyList_New(0);
+            if (tmp == NULL) {
+                return 1;
+            }
+        }
+        {
+            int res;
+            Py_ssize_t len;
+            Py_ssize_t i;
+            if (!PyList_Check(tmp)) {
+                PyErr_Format(PyExc_TypeError, "Switch field \"cases\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+                goto failed;
+            }
+            len = PyList_GET_SIZE(tmp);
+            cases = _Py_asdl_switch_case_seq_new(len, arena);
+            if (cases == NULL) goto failed;
+            for (i = 0; i < len; i++) {
+                switch_case_ty val;
+                PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+                if (_Py_EnterRecursiveCall(" while traversing 'Switch' node")) {
+                    goto failed;
+                }
+                res = obj2ast_switch_case(state, tmp2, &val, arena);
+                _Py_LeaveRecursiveCall();
+                Py_DECREF(tmp2);
+                if (res != 0) goto failed;
+                if (len != PyList_GET_SIZE(tmp)) {
+                    PyErr_SetString(PyExc_RuntimeError, "Switch field \"cases\" changed size during iteration");
+                    goto failed;
+                }
+                asdl_seq_SET(cases, i, val);
+            }
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Switch(subject, cases, lineno, col_offset, end_lineno,
+                             end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }
@@ -12308,6 +12488,98 @@ failed:
 }
 
 int
+obj2ast_switch_case(struct ast_state *state, PyObject* obj, switch_case_ty*
+                    out, PyArena* arena)
+{
+    PyObject* tmp = NULL;
+    asdl_expr_seq* patterns;
+    asdl_stmt_seq* body;
+
+    if (PyObject_GetOptionalAttr(obj, state->patterns, &tmp) < 0) {
+        return 1;
+    }
+    if (tmp == NULL) {
+        tmp = PyList_New(0);
+        if (tmp == NULL) {
+            return 1;
+        }
+    }
+    {
+        int res;
+        Py_ssize_t len;
+        Py_ssize_t i;
+        if (!PyList_Check(tmp)) {
+            PyErr_Format(PyExc_TypeError, "switch_case field \"patterns\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+            goto failed;
+        }
+        len = PyList_GET_SIZE(tmp);
+        patterns = _Py_asdl_expr_seq_new(len, arena);
+        if (patterns == NULL) goto failed;
+        for (i = 0; i < len; i++) {
+            expr_ty val;
+            PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+            if (_Py_EnterRecursiveCall(" while traversing 'switch_case' node")) {
+                goto failed;
+            }
+            res = obj2ast_expr(state, tmp2, &val, arena);
+            _Py_LeaveRecursiveCall();
+            Py_DECREF(tmp2);
+            if (res != 0) goto failed;
+            if (len != PyList_GET_SIZE(tmp)) {
+                PyErr_SetString(PyExc_RuntimeError, "switch_case field \"patterns\" changed size during iteration");
+                goto failed;
+            }
+            asdl_seq_SET(patterns, i, val);
+        }
+        Py_CLEAR(tmp);
+    }
+    if (PyObject_GetOptionalAttr(obj, state->body, &tmp) < 0) {
+        return 1;
+    }
+    if (tmp == NULL) {
+        tmp = PyList_New(0);
+        if (tmp == NULL) {
+            return 1;
+        }
+    }
+    {
+        int res;
+        Py_ssize_t len;
+        Py_ssize_t i;
+        if (!PyList_Check(tmp)) {
+            PyErr_Format(PyExc_TypeError, "switch_case field \"body\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+            goto failed;
+        }
+        len = PyList_GET_SIZE(tmp);
+        body = _Py_asdl_stmt_seq_new(len, arena);
+        if (body == NULL) goto failed;
+        for (i = 0; i < len; i++) {
+            stmt_ty val;
+            PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+            if (_Py_EnterRecursiveCall(" while traversing 'switch_case' node")) {
+                goto failed;
+            }
+            res = obj2ast_stmt(state, tmp2, &val, arena);
+            _Py_LeaveRecursiveCall();
+            Py_DECREF(tmp2);
+            if (res != 0) goto failed;
+            if (len != PyList_GET_SIZE(tmp)) {
+                PyErr_SetString(PyExc_RuntimeError, "switch_case field \"body\" changed size during iteration");
+                goto failed;
+            }
+            asdl_seq_SET(body, i, val);
+        }
+        Py_CLEAR(tmp);
+    }
+    *out = _PyAST_switch_case(patterns, body, arena);
+    if (*out == NULL) goto failed;
+    return 0;
+failed:
+    Py_XDECREF(tmp);
+    return 1;
+}
+
+int
 obj2ast_match_case(struct ast_state *state, PyObject* obj, match_case_ty* out,
                    PyArena* arena)
 {
@@ -13339,6 +13611,9 @@ astmodule_exec(PyObject *m)
     if (PyModule_AddObjectRef(m, "AsyncWith", state->AsyncWith_type) < 0) {
         return -1;
     }
+    if (PyModule_AddObjectRef(m, "Switch", state->Switch_type) < 0) {
+        return -1;
+    }
     if (PyModule_AddObjectRef(m, "Match", state->Match_type) < 0) {
         return -1;
     }
@@ -13631,6 +13906,9 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "withitem", state->withitem_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "switch_case", state->switch_case_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "match_case", state->match_case_type) < 0) {

@@ -46,6 +46,8 @@ typedef struct _alias *alias_ty;
 
 typedef struct _withitem *withitem_ty;
 
+typedef struct _switch_case *switch_case_ty;
+
 typedef struct _match_case *match_case_ty;
 
 typedef struct _pattern *pattern_ty;
@@ -129,6 +131,14 @@ asdl_withitem_seq *_Py_asdl_withitem_seq_new(Py_ssize_t size, PyArena *arena);
 
 typedef struct {
     _ASDL_SEQ_HEAD
+    switch_case_ty typed_elements[1];
+} asdl_switch_case_seq;
+
+asdl_switch_case_seq *_Py_asdl_switch_case_seq_new(Py_ssize_t size, PyArena
+                                                   *arena);
+
+typedef struct {
+    _ASDL_SEQ_HEAD
     match_case_ty typed_elements[1];
 } asdl_match_case_seq;
 
@@ -189,11 +199,12 @@ enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
                   Return_kind=4, Delete_kind=5, Assign_kind=6,
                   TypeAlias_kind=7, AugAssign_kind=8, AnnAssign_kind=9,
                   For_kind=10, AsyncFor_kind=11, While_kind=12, If_kind=13,
-                  With_kind=14, AsyncWith_kind=15, Match_kind=16,
-                  Raise_kind=17, Try_kind=18, TryStar_kind=19, Assert_kind=20,
-                  Import_kind=21, ImportFrom_kind=22, Global_kind=23,
-                  Nonlocal_kind=24, Label_kind=25, Goto_kind=26, Expr_kind=27,
-                  Pass_kind=28, Break_kind=29, Continue_kind=30};
+                  With_kind=14, AsyncWith_kind=15, Switch_kind=16,
+                  Match_kind=17, Raise_kind=18, Try_kind=19, TryStar_kind=20,
+                  Assert_kind=21, Import_kind=22, ImportFrom_kind=23,
+                  Global_kind=24, Nonlocal_kind=25, Label_kind=26,
+                  Goto_kind=27, Expr_kind=28, Pass_kind=29, Break_kind=30,
+                  Continue_kind=31};
 struct _stmt {
     enum _stmt_kind kind;
     union {
@@ -298,6 +309,11 @@ struct _stmt {
             asdl_stmt_seq *body;
             string type_comment;
         } AsyncWith;
+
+        struct {
+            expr_ty subject;
+            asdl_switch_case_seq *cases;
+        } Switch;
 
         struct {
             expr_ty subject;
@@ -607,6 +623,11 @@ struct _withitem {
     expr_ty optional_vars;
 };
 
+struct _switch_case {
+    asdl_expr_seq *patterns;
+    asdl_stmt_seq *body;
+};
+
 struct _match_case {
     pattern_ty pattern;
     expr_ty guard;
@@ -761,6 +782,9 @@ stmt_ty _PyAST_With(asdl_withitem_seq * items, asdl_stmt_seq * body, string
 stmt_ty _PyAST_AsyncWith(asdl_withitem_seq * items, asdl_stmt_seq * body,
                          string type_comment, int lineno, int col_offset, int
                          end_lineno, int end_col_offset, PyArena *arena);
+stmt_ty _PyAST_Switch(expr_ty subject, asdl_switch_case_seq * cases, int
+                      lineno, int col_offset, int end_lineno, int
+                      end_col_offset, PyArena *arena);
 stmt_ty _PyAST_Match(expr_ty subject, asdl_match_case_seq * cases, int lineno,
                      int col_offset, int end_lineno, int end_col_offset,
                      PyArena *arena);
@@ -904,6 +928,8 @@ alias_ty _PyAST_alias(identifier name, identifier asname, int lineno, int
                       *arena);
 withitem_ty _PyAST_withitem(expr_ty context_expr, expr_ty optional_vars,
                             PyArena *arena);
+switch_case_ty _PyAST_switch_case(asdl_expr_seq * patterns, asdl_stmt_seq *
+                                  body, PyArena *arena);
 match_case_ty _PyAST_match_case(pattern_ty pattern, expr_ty guard,
                                 asdl_stmt_seq * body, PyArena *arena);
 pattern_ty _PyAST_MatchValue(expr_ty value, int lineno, int col_offset, int

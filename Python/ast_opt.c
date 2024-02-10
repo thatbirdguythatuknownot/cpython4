@@ -952,6 +952,7 @@ static int astfold_keyword(keyword_ty node_, PyArena *ctx_, _PyASTOptimizeState 
 static int astfold_arg(arg_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_withitem(withitem_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_excepthandler(excepthandler_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
+static int astfold_switch_case(switch_case_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_match_case(match_case_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_pattern(pattern_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_type_param(type_param_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
@@ -1324,6 +1325,10 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case Expr_kind:
         CALL(astfold_expr, expr_ty, node_->v.Expr.value);
         break;
+    case Switch_kind:
+        CALL(astfold_expr, expr_ty, node_->v.Switch.subject);
+        CALL_SEQ(astfold_switch_case, switch_case, node_->v.Switch.cases);
+        break;
     case Match_kind:
         CALL(astfold_expr, expr_ty, node_->v.Match.subject);
         CALL_SEQ(astfold_match_case, match_case, node_->v.Match.cases);
@@ -1420,6 +1425,52 @@ astfold_match_case(match_case_ty node_, PyArena *ctx_, _PyASTOptimizeState *stat
     CALL(astfold_pattern, expr_ty, node_->pattern);
     CALL_OPT(astfold_expr, expr_ty, node_->guard);
     CALL_SEQ(astfold_stmt, stmt, node_->body);
+    return 1;
+}
+
+static int
+astfold_switch_case(switch_case_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
+{
+    CALL_SEQ(astfold_expr, expr, node_->patterns);
+    CALL_SEQ(astfold_stmt, stmt, node_->body);
+    return 1;
+}
+
+static int
+astfold_switch(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
+{
+    Py_ssize_t i, j;
+    PyObject *subj;
+    expr_ty subject_expr;
+    assert(node_->kind == Switch_kind);
+
+    subject_expr = node_->v.Switch.subject;
+    if (subject_expr->kind != Constant_kind) {
+        return 1;
+    }
+    subj = subject_expr->v.Constant.value;
+
+    for (i = 0; i < asdl_seq_LEN(node_->v.Switch.cases); i++) {
+        switch_case_ty s = asdl_seq_GET(node_->v.Switch.cases, i);
+        for (j = 0; j < asdl_seq_LEN(s->patterns); j++) {
+            expr_ty e = asdl_seq_GET(s->patterns, j);
+            if (e->kind != Constant_kind) {
+                return 1;
+            }
+            if (!PyLong_CheckExact(e->v.Constant.value)) {
+                continue;
+            }
+            int res = PyObject_RichCompareBool(subj, e->v.Constant.value, Py_EQ);
+            if (res < 0) {
+                PyErr_Clear();
+                continue;
+            }
+            if (res) {
+                COPY_NODE(node_, e);
+            }
+        }
+    }
+
     return 1;
 }
 

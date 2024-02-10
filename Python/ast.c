@@ -825,6 +825,20 @@ validate_stmt(struct validator *state, stmt_ty stmt)
         }
         ret = validate_body(state, stmt->v.AsyncWith.body, "AsyncWith");
         break;
+    case Switch_kind:
+        if (!validate_expr(state, stmt->v.Switch.subject, Load)
+            || !validate_nonempty_seq(stmt->v.Switch.cases, "cases", "Switch")) {
+            return 0;
+        }
+        for (Py_ssize_t i = 0; i < asdl_seq_LEN(stmt->v.Switch.cases); i++) {
+            switch_case_ty s = asdl_seq_GET(stmt->v.Switch.cases, i);
+            if (!validate_exprs(state, s->patterns, Load, 0)
+                || !validate_body(state, s->body, "switch_case")) {
+                return 0;
+            }
+        }
+        ret = 1;
+        break;
     case Match_kind:
         if (!validate_expr(state, stmt->v.Match.subject, Load)
             || !validate_nonempty_seq(stmt->v.Match.cases, "cases", "Match")) {

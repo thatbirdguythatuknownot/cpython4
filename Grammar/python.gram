@@ -136,6 +136,7 @@ compound_stmt[stmt_ty]:
     | &('for' | 'async') for_stmt
     | &'try' try_stmt
     | &'while' while_stmt
+    | &"switch" switch_stmt
     | match_stmt
 
 # SIMPLE STATEMENTS
@@ -461,6 +462,69 @@ except_star_block[excepthandler_ty]:
 finally_block[asdl_stmt_seq*]:
     | invalid_finally_stmt
     | 'finally' &&':' a=block { a }
+
+# Switch statement
+# ----------------
+
+switch_stmt[stmt_ty]:
+    | "switch" subject=named_expression ':' NEWLINE INDENT cases[asdl_switch_case_seq*]=switchcase_block+ DEDENT {
+        _PyAST_Switch(subject, cases, EXTRA) }
+    | "switch" subject=named_expression ':' NEWLINE cases[asdl_switch_case_seq*]=switchcase_block+ {
+        _PyAST_Switch(subject, cases, EXTRA) }
+
+switchcase_block[switch_case_ty]:
+    | "case" exprs[asdl_expr_seq*]=','.(
+        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ ':' body=block {
+        _PyAST_switch_case(exprs, body, p->arena) }
+
+bitwiseor_pattern[expr_ty]:
+    | a=bitwiseor_pattern '|' b=bitwisexor_pattern { _PyAST_BinOp(a, BitOr, b, EXTRA) }
+    | bitwisexor_pattern
+
+bitwisexor_pattern[expr_ty]:
+    | a=bitwisexor_pattern '^' b=bitwiseand_pattern { _PyAST_BinOp(a, BitXor, b, EXTRA) }
+    | bitwiseand_pattern
+
+bitwiseand_pattern[expr_ty]:
+    | a=bitwiseand_pattern '&' b=shift_pattern { _PyAST_BinOp(a, BitAnd, b, EXTRA) }
+    | shift_pattern
+
+shift_pattern[expr_ty]:
+    | a=shift_pattern '<<' b=sum_pattern { _PyAST_BinOp(a, LShift, b, EXTRA) }
+    | a=shift_pattern '>>' b=sum_pattern { _PyAST_BinOp(a, RShift, b, EXTRA) }
+    | sum_pattern
+
+sum_pattern[expr_ty]:
+    | a=sum_pattern '+' b=term_pattern { _PyAST_BinOp(a, Add, b, EXTRA) }
+    | a=sum_pattern '-' b=term_pattern { _PyAST_BinOp(a, Sub, b, EXTRA) }
+    | term_pattern
+
+term_pattern[expr_ty]:
+    | a=term_pattern '*' b=factor_pattern { _PyAST_BinOp(a, Mult, b, EXTRA) }
+    | a=term_pattern '/' b=factor_pattern { _PyAST_BinOp(a, Div, b, EXTRA) }
+    | a=term_pattern '//' b=factor_pattern { _PyAST_BinOp(a, FloorDiv, b, EXTRA) }
+    | a=term_pattern '%' b=factor_pattern { _PyAST_BinOp(a, Mod, b, EXTRA) }
+    | a=term_pattern '@' b=factor_pattern { CHECK_VERSION(expr_ty, 5, "The '@' operator is", _PyAST_BinOp(a, MatMult, b, EXTRA)) }
+    | factor_pattern
+
+factor_pattern[expr_ty] (memo):
+    | '+' a=factor_pattern { _PyAST_UnaryOp(UAdd, a, EXTRA) }
+    | '-' a=factor_pattern { _PyAST_UnaryOp(USub, a, EXTRA) }
+    | '~' a=factor_pattern { _PyAST_UnaryOp(Invert, a, EXTRA) }
+    | '!' a=factor_pattern { _PyAST_UnaryOp(Not, a, EXTRA) }
+    | power_pattern
+
+power_pattern[expr_ty]:
+    | a=number_pattern '**' b=factor_pattern { _PyAST_BinOp(a, Pow, b, EXTRA) }
+    | number_pattern
+
+number_pattern[expr_ty]:
+    | 'True' { _PyAST_Constant(Py_True, NULL, EXTRA) }
+    | 'False' { _PyAST_Constant(Py_False, NULL, EXTRA) }
+    | intnum=NUMBER {
+        intnum->kind == Constant_kind
+            ? PyLong_CheckExact(intnum) ? intnum : NULL
+            : NULL }
 
 # Match statement
 # ---------------

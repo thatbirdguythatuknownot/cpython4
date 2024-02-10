@@ -248,6 +248,7 @@ static int symtable_visit_argannotations(struct symtable *st, asdl_arg_seq *args
 static int symtable_implicit_arg(struct symtable *st, int pos);
 static int symtable_visit_annotations(struct symtable *st, stmt_ty, arguments_ty, expr_ty);
 static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
+static int symtable_visit_switch_case(struct symtable *st, switch_case_ty m);
 static int symtable_visit_match_case(struct symtable *st, match_case_ty m);
 static int symtable_visit_pattern(struct symtable *st, pattern_ty s);
 static int symtable_raise_if_annotation_block(struct symtable *st, const char *, expr_ty);
@@ -1653,6 +1654,10 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         if (s->v.If.orelse)
             VISIT_SEQ(st, stmt, s->v.If.orelse);
         break;
+    case Switch_kind:
+        VISIT(st, expr, s->v.Switch.subject);
+        VISIT_SEQ(st, switch_case, s->v.Switch.cases);
+        break;
     case Match_kind:
         VISIT(st, expr, s->v.Match.subject);
         VISIT_SEQ(st, match_case, s->v.Match.cases);
@@ -2358,6 +2363,14 @@ symtable_visit_withitem(struct symtable *st, withitem_ty item)
     if (item->optional_vars) {
         VISIT(st, expr, item->optional_vars);
     }
+    return 1;
+}
+
+static int
+symtable_visit_switch_case(struct symtable *st, switch_case_ty s)
+{
+    VISIT_SEQ(st, expr, s->patterns);
+    VISIT_SEQ(st, stmt, s->body);
     return 1;
 }
 

@@ -479,6 +479,7 @@ static int compiler_pattern(struct compiler *, pattern_ty, pattern_context *);
 static int compiler_match(struct compiler *, stmt_ty);
 static int compiler_pattern_subpattern(struct compiler *,
                                        pattern_ty, pattern_context *);
+static int compiler_switch(struct compiler *, stmt_ty);
 
 static PyCodeObject *optimize_and_assemble(struct compiler *, int addNone);
 
@@ -1539,6 +1540,15 @@ find_ann(asdl_stmt_seq *stmts)
             res = find_ann(st->v.TryStar.body) ||
                   find_ann(st->v.TryStar.finalbody) ||
                   find_ann(st->v.TryStar.orelse);
+            break;
+        case Switch_kind:
+            for (j = 0; j < asdl_seq_LEN(st->v.Switch.cases); j++) {
+                switch_case_ty switch_case = (switch_case_ty)asdl_seq_GET(
+                    st->v.Switch.cases, j);
+                if (find_ann(switch_case->body)) {
+                    return true;
+                }
+            }
             break;
         case Match_kind:
             for (j = 0; j < asdl_seq_LEN(st->v.Match.cases); j++) {
@@ -4139,6 +4149,8 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
         return compiler_while(c, s);
     case If_kind:
         return compiler_if(c, s);
+    case Switch_kind:
+        return compiler_switch(c, s);
     case Match_kind:
         return compiler_match(c, s);
     case Raise_kind:
@@ -7749,6 +7761,36 @@ compiler_match(struct compiler *c, stmt_ty s)
 
 #undef WILDCARD_CHECK
 #undef WILDCARD_STAR_CHECK
+
+
+static int
+compiler_switch(struct compiler *c, stmt_ty s)
+{
+    /*
+    VISIT(c, expr, s->v.Switch.subject);
+    NEW_JUMP_TARGET_LABEL(c, end);
+    Py_ssize_t cases = asdl_seq_LEN(s->v.Switch.cases);
+    assert(cases > 0);
+    switch_case_ty ca = asdl_seq_GET(s->v.Switch.cases, cases - 1);
+    for (Py_ssize_t i = 0; i < cases; i++) {
+        ca = asdl_seq_GET(s->v.Switch.cases, i);
+        // Only copy the subject if we're *not* on the last case:
+        if (i != cases - 1) {
+            ADDOP_I(c, LOC(ca->pattern), COPY, 1);
+        }
+
+        // Success! Pop the subject off, we're done with it:
+        if (i != cases - 1) {
+            ADDOP(c, LOC(ca->pattern), POP_TOP);
+        }
+        VISIT_SEQ(c, stmt, ca->body);
+        ADDOP_JUMP(c, NO_LOCATION, JUMP, end);
+    }
+    USE_LABEL(c, end);
+    return SUCCESS;
+    */
+    return SUCCESS;
+}
 
 static PyObject *
 consts_dict_keys_inorder(PyObject *dict)

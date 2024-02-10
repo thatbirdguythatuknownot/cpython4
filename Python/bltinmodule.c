@@ -1766,13 +1766,13 @@ builtin_locals_impl(PyObject *module)
 }
 
 
-static PyObject *
-min_max(PyObject *args, PyObject *kwds, int op)
+static int
+min_max(PyObject *args, PyObject *kwds, PyObject **minim, PyObject **maxim)
 {
-    PyObject *v, *it, *item, *val, *maxitem, *maxval, *keyfunc=NULL;
+    PyObject *v, *it, *item, *val, *maxval, *minval, *keyfunc=NULL;
     PyObject *emptytuple, *defaultval = NULL;
     static char *kwlist[] = {"key", "default", NULL};
-    const char *name = op == Py_LT ? "min" : "max";
+    const char *name = (minim && maxim) ? "min_max" : (maxim == NULL) ? "min" : "max";
     const int positional = PyTuple_Size(args) > 1;
     int ret;
 
@@ -1783,38 +1783,41 @@ min_max(PyObject *args, PyObject *kwds, int op)
         if (PyExceptionClass_Check(PyExc_TypeError)) {
             PyErr_Format(PyExc_TypeError, "%s expected at least 1 argument, got 0", name);
         }
-        return NULL;
+        return -1;
     }
 
     emptytuple = PyTuple_New(0);
     if (emptytuple == NULL)
-        return NULL;
+        return -1;
     ret = PyArg_ParseTupleAndKeywords(emptytuple, kwds,
-                                      (op == Py_LT) ? "|$OO:min" : "|$OO:max",
+                                      (minim && maxim) ? "|$OO:min_max" :
+                                      (maxim == NULL) ? "|$OO:min" : "|$OO:max",
                                       kwlist, &keyfunc, &defaultval);
     Py_DECREF(emptytuple);
     if (!ret)
-        return NULL;
+        return -1;
 
     if (positional && defaultval != NULL) {
         PyErr_Format(PyExc_TypeError,
                         "Cannot specify a default for %s() with multiple "
                         "positional arguments", name);
-        return NULL;
+        return -1;
     }
 
     it = PyObject_GetIter(v);
     if (it == NULL) {
-        return NULL;
+        return -1;
     }
 
     if (keyfunc == Py_None) {
         keyfunc = NULL;
     }
 
-    maxitem = NULL; /* the result */
-    maxval = NULL;  /* the value associated with the result */
+    maxval = NULL, minval = NULL;  /* the values associated with the result */
     while (( item = PyIter_Next(it) )) {
+        if (maxim && minim) {
+            Py_INCREF(item);
+        }
         /* get the value from the key function */
         if (keyfunc != NULL) {
             val = PyObject_CallOneArg(keyfunc, item);
@@ -1826,60 +1829,119 @@ min_max(PyObject *args, PyObject *kwds, int op)
             val = Py_NewRef(item);
         }
 
-        /* maximum value and item are unset; set them */
-        if (maxval == NULL) {
-            maxitem = item;
-            maxval = val;
+        if (maxim && minim) {
+            Py_INCREF(val);
         }
-        /* maximum value and item are set; update them as necessary */
-        else {
-            int cmp = PyObject_RichCompareBool(val, maxval, op);
-            if (cmp < 0)
-                goto Fail_it_item_and_val;
-            else if (cmp > 0) {
-                Py_DECREF(maxval);
-                Py_DECREF(maxitem);
+        /* maximum value and item are unset; set them */
+        if (maxval == NULL && minval == NULL) {
+            if (maxim) {
+                *maxim = item;
                 maxval = val;
-                maxitem = item;
             }
-            else {
-                Py_DECREF(item);
-                Py_DECREF(val);
+            if (minim) {
+                *minim = item;
+                minval = val;
+            }
+        }
+        /* value and item are set; update them as necessary */
+        else {
+            if (maxim) {
+                int cmp = PyObject_RichCompareBool(val, maxval, Py_GT);
+                if (cmp < 0)
+                    goto Fail_it_item_and_val;
+                else if (cmp > 0) {
+                    Py_DECREF(maxval);
+                    Py_DECREF(*maxim);
+                    maxval = val;
+                    *maxim = item;
+                }
+                else {
+                    Py_DECREF(item);
+                    Py_DECREF(val);
+                }
+            }
+            if (minim) {
+                int cmp = PyObject_RichCompareBool(val, minval, Py_LT);
+                if (cmp < 0)
+                    goto Fail_it_item_and_val;
+                else if (cmp > 0) {
+                    Py_DECREF(minval);
+                    Py_DECREF(*minim);
+                    minval = val;
+                    *minim = item;
+                }
+                else {
+                    Py_DECREF(item);
+                    Py_DECREF(val);
+                }
             }
         }
     }
     if (PyErr_Occurred())
         goto Fail_it;
     if (maxval == NULL) {
-        assert(maxitem == NULL);
-        if (defaultval != NULL) {
-            maxitem = Py_NewRef(defaultval);
-        } else {
-            PyErr_Format(PyExc_ValueError,
-                         "%s() iterable argument is empty", name);
+        if (maxim) {
+            assert(*maxim == NULL);
+            if (defaultval != NULL) {
+                *maxim = Py_NewRef(defaultval);
+            } else {
+                PyErr_Format(PyExc_ValueError,
+                             "%s() iterable argument is empty", name);
+                goto Fail_it;
+            }
         }
     }
     else
         Py_DECREF(maxval);
+    if (minval == NULL) {
+        if (minim) {
+            assert(*minim == NULL);
+            if (defaultval != NULL) {
+                *minim = Py_NewRef(defaultval);
+            } else {
+                PyErr_Format(PyExc_ValueError,
+                             "%s() iterable argument is empty", name);
+                goto Fail_it;
+            }
+        }
+    }
+    else
+        Py_DECREF(minval);
     Py_DECREF(it);
-    return maxitem;
+    return 0;
 
 Fail_it_item_and_val:
     Py_DECREF(val);
+    if (maxim && minim) {
+        Py_DECREF(val);
+    }
 Fail_it_item:
     Py_DECREF(item);
+    if (maxim && minim) {
+        Py_DECREF(item);
+    }
 Fail_it:
     Py_XDECREF(maxval);
-    Py_XDECREF(maxitem);
+    if (maxim) {
+        Py_XDECREF(*maxim);
+        *maxim = NULL;
+    }
+    Py_XDECREF(minval);
+    if (minim) {
+        Py_XDECREF(*minim);
+        *minim = NULL;
+    }
     Py_DECREF(it);
-    return NULL;
+    return -1;
 }
 
 /* AC: cannot convert yet, waiting for *args support */
 static PyObject *
 builtin_min(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    return min_max(args, kwds, Py_LT);
+    PyObject *val = NULL;
+    min_max(args, kwds, &val, NULL);
+    return val;
 }
 
 PyDoc_STRVAR(min_doc,
@@ -1896,7 +1958,9 @@ With two or more arguments, return the smallest argument.");
 static PyObject *
 builtin_max(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    return min_max(args, kwds, Py_GT);
+    PyObject *val = NULL;
+    min_max(args, kwds, NULL, &val);
+    return val;
 }
 
 PyDoc_STRVAR(max_doc,
@@ -1907,6 +1971,30 @@ With a single iterable argument, return its biggest item. The\n\
 default keyword-only argument specifies an object to return if\n\
 the provided iterable is empty.\n\
 With two or more arguments, return the largest argument.");
+
+
+/* AC: cannot convert yet, waiting for *args support */
+static PyObject *
+builtin_min_max(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    PyObject *minval = NULL, *maxval = NULL;
+    if (min_max(args, kwds, &minval, &maxval) < 0) {
+        return NULL;
+    }
+    PyObject *res = PyTuple_Pack(2, minval, maxval);
+    Py_DECREF(minval);
+    Py_DECREF(maxval);
+    return res;
+}
+
+PyDoc_STRVAR(min_max_doc,
+"min_max(iterable, *[, default=obj, key=func]) -> (min_value, max_value)\n\
+min_max(arg1, arg2, *args, *[, key=func]) -> (min_value, max_value)\n\
+\n\
+With a single iterable argument, return its smallest and largest items.\n\
+The default keyword-only argument specifies an object to return if\n\
+the provided iterable is empty.\n\
+With two or more arguments, return the smallest and largest arguments.");
 
 
 /*[clinic input]
@@ -3059,6 +3147,7 @@ static PyMethodDef builtin_methods[] = {
     BUILTIN_LOCALS_METHODDEF
     {"max", _PyCFunction_CAST(builtin_max), METH_VARARGS | METH_KEYWORDS, max_doc},
     {"min", _PyCFunction_CAST(builtin_min), METH_VARARGS | METH_KEYWORDS, min_doc},
+    {"min_max", _PyCFunction_CAST(builtin_min_max), METH_VARARGS | METH_KEYWORDS, min_max_doc},
     BUILTIN_NEXT_METHODDEF
     BUILTIN_ANEXT_METHODDEF
     BUILTIN_OCT_METHODDEF

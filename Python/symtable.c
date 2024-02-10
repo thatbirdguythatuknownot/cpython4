@@ -513,6 +513,10 @@ error_at_directive(PySTEntryObject *ste, PyObject *name)
     Py_DECREF(o); \
 }
 
+static int
+symtable_add_def_helper(struct symtable *, PyObject *, int, struct _symtable_entry *,
+                        int, int, int, int);
+
 /* Decide on scope of name, given flags.
 
    The namespace dictionaries may be modified to record information
@@ -521,8 +525,8 @@ error_at_directive(PySTEntryObject *ste, PyObject *name)
 */
 
 static int
-analyze_name(PySTEntryObject *ste, PyObject *scopes, PyObject *name, long flags,
-             PyObject *bound, PyObject *local, PyObject *free,
+analyze_name(struct symtable *st, PySTEntryObject *ste, PyObject *scopes, PyObject *name,
+             long flags, PyObject *bound, PyObject *local, PyObject *free,
              PyObject *global, PyObject *type_params, PySTEntryObject *class_entry)
 {
     if (flags & DEF_GLOBAL) {
@@ -546,10 +550,15 @@ analyze_name(PySTEntryObject *ste, PyObject *scopes, PyObject *name, long flags,
             return error_at_directive(ste, name);
         }
         if (!PySet_Contains(bound, name)) {
-            PyErr_Format(PyExc_SyntaxError,
-                         "no binding for nonlocal '%U' found",
-                         name);
-
+            /*if (PySet_Add(bound, name) < 0)
+                return 0;
+            assert(PyList_GET_SIZE(st->st_stack) > 1);
+            struct _symtable_entry *ste = (struct _symtable_entry *)PyList_GET_ITEM(
+                st->st_stack, PyList_GET_SIZE(st->st_stack) - 2);
+            if (!symtable_add_def_helper(st, name, DEF_LOCAL, ste, -1, -1, -1, -1)) {
+                return 0;
+            }*/
+            PyErr_Format(PyExc_SyntaxError, "no binding for nonlocal '%U'", name);
             return error_at_directive(ste, name);
         }
         if (PySet_Contains(type_params, name)) {
@@ -865,13 +874,13 @@ error:
 */
 
 static int
-analyze_child_block(PySTEntryObject *entry, PyObject *bound, PyObject *free,
-                    PyObject *global, PyObject *type_params,
+analyze_child_block(struct symtable *st, PySTEntryObject *entry, PyObject *bound,
+                    PyObject *free, PyObject *global, PyObject *type_params,
                     PySTEntryObject *class_entry, PyObject **child_free);
 
 static int
-analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
-              PyObject *global, PyObject *type_params,
+analyze_block(struct symtable *st, PySTEntryObject *ste, PyObject *bound,
+              PyObject *free, PyObject *global, PyObject *type_params,
               PySTEntryObject *class_entry)
 {
     PyObject *name, *v, *local = NULL, *scopes = NULL, *newbound = NULL;
@@ -933,7 +942,7 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
 
     while (PyDict_Next(ste->ste_symbols, &pos, &name, &v)) {
         long flags = PyLong_AS_LONG(v);
-        if (!analyze_name(ste, scopes, name, flags,
+        if (!analyze_name(st, ste, scopes, name, flags,
                           bound, local, free, global, type_params, class_entry))
             goto error;
     }
@@ -996,7 +1005,7 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
             entry->ste_comprehension &&
             !entry->ste_generator;
 
-        if (!analyze_child_block(entry, newbound, newfree, newglobal,
+        if (!analyze_child_block(st, entry, newbound, newfree, newglobal,
                                  type_params, new_class_entry, &child_free))
         {
             goto error;
@@ -1060,8 +1069,8 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
 }
 
 static int
-analyze_child_block(PySTEntryObject *entry, PyObject *bound, PyObject *free,
-                    PyObject *global, PyObject *type_params,
+analyze_child_block(struct symtable *st, PySTEntryObject *entry, PyObject *bound,
+                    PyObject *free, PyObject *global, PyObject *type_params,
                     PySTEntryObject *class_entry, PyObject** child_free)
 {
     PyObject *temp_bound = NULL, *temp_global = NULL, *temp_free = NULL;
@@ -1087,7 +1096,7 @@ analyze_child_block(PySTEntryObject *entry, PyObject *bound, PyObject *free,
     if (!temp_type_params)
         goto error;
 
-    if (!analyze_block(entry, temp_bound, temp_free, temp_global,
+    if (!analyze_block(st, entry, temp_bound, temp_free, temp_global,
                        temp_type_params, class_entry))
         goto error;
     *child_free = temp_free;
@@ -1123,7 +1132,7 @@ symtable_analyze(struct symtable *st)
         Py_DECREF(global);
         return 0;
     }
-    r = analyze_block(st->st_top, NULL, free, global, type_params, NULL);
+    r = analyze_block(st, st->st_top, NULL, free, global, type_params, NULL);
     Py_DECREF(free);
     Py_DECREF(global);
     Py_DECREF(type_params);

@@ -547,7 +547,7 @@ analyze_name(PySTEntryObject *ste, PyObject *scopes, PyObject *name, long flags,
         }
         if (!PySet_Contains(bound, name)) {
             PyErr_Format(PyExc_SyntaxError,
-                         "no binding for nonlocal '%U'",
+                         "no binding for nonlocal '%U' found",
                          name);
             return error_at_directive(ste, name);
         }

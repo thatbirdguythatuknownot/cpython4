@@ -1762,10 +1762,18 @@ do_raise(PyThreadState *tstate, PyObject *exc, PyObject *cause)
             Py_DECREF(cause);
             fixed_cause = NULL;
         }
+        else if (PyLong_Check(cause)) {
+            if (_PyLong_IsPositive((PyLongObject *)cause)) {
+                _PyErr_SetString(tstate, PyExc_TypeError,
+                                 "int exception cause must be negative or 0");
+                goto raise_error;
+            }
+            fixed_cause = cause;
+        }
         else {
             _PyErr_SetString(tstate, PyExc_TypeError,
-                             "exception causes must derive from "
-                             "BaseException");
+                             "exception cause must derive from "
+                             "BaseException or is an int");
             goto raise_error;
         }
         PyException_SetCause(value, fixed_cause);

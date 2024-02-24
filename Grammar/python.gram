@@ -131,6 +131,7 @@ simple_stmt[stmt_ty] (memo):
 compound_stmt[stmt_ty]:
     | &("def" | '@' | 'async') function_def
     | &'if' if_stmt
+    | &':' unless_stmt
     | &('class' | '@') class_def
     | &('with' | 'async') with_stmt
     | &('for' | 'async') for_stmt
@@ -717,6 +718,13 @@ keyword_patterns[asdl_seq*]:
 
 keyword_pattern[KeyPatternPair*]:
     | arg=NAME '=' value=pattern { _PyPegen_key_pattern_pair(p, arg, value) }
+
+# Unless statement
+# ----------------
+
+unless_stmt[stmt_ty]:
+    | ':' b=(s[asdl_stmt_seq*]=';'.simple_stmt+ [';'] { s } | block) 'unless' a=named_expression {
+        _PyAST_If(_PyAST_UnaryOp(Not, a, EXTRA), b, NULL, EXTRA) }
 
 # Type statement
 # ---------------

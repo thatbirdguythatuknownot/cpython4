@@ -48,6 +48,7 @@ kwlist = [
     'raise',
     'return',
     'try',
+    'unless',
     'while',
     'with',
     'yield'
@@ -59,6 +60,7 @@ softkwlist = [
     'def',
     'label',
     'match',
+    'switch',
     'type',
     'where'
 ]

@@ -244,6 +244,26 @@ PyTraceBack_Here(PyFrameObject *frame)
 {
     PyObject *exc = PyErr_GetRaisedException();
     assert(PyExceptionInstance_Check(exc));
+    PyObject *cause = PyException_GetCause(exc);
+    if (cause != NULL && PyLong_Check(cause)) {
+        PyException_SetCause(exc, NULL);
+        long overflow;
+        /* We don't need to worry about errors here;
+           cause is not NULL and is a PyLong instance. */
+        long back = PyLong_AsLongAndOverflow(cause, &overflow);
+        if (overflow) {
+            /* Guaranteed negative overflow. */
+            back = LONG_MIN;
+        }
+        while (back++) {
+            frame = frame->f_back;
+            if (frame == NULL) {
+                PyErr_SetRaisedException(exc);
+                return 0;
+            }
+            frame = frame->f_back;
+        }
+    }
     PyObject *tb = PyException_GetTraceback(exc);
     PyObject *newtb = _PyTraceBack_FromFrame(tb, frame);
     Py_XDECREF(tb);

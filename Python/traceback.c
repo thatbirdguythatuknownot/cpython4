@@ -264,6 +264,7 @@ PyTraceBack_Here(PyFrameObject *frame)
             frame = frame->f_back;
         }
     }
+    Py_XDECREF(cause);
     PyObject *tb = PyException_GetTraceback(exc);
     PyObject *newtb = _PyTraceBack_FromFrame(tb, frame);
     Py_XDECREF(tb);

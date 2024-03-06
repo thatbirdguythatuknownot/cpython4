@@ -54,10 +54,6 @@ typedef struct _PyCfgBasicblock {
     int b_iused;
     /* length of instruction array (b_instr) */
     int b_ialloc;
-    /* index for b_template_subs */
-    int b_nsubs;
-    /* array to keep track of the template substitutions */
-    int b_template_subs[MAX_TEMPLATE_NEST];
     /* Used by add_checks_for_loads_of_unknown_variables */
     uint64_t b_unsafe_locals_mask;
     /* Number of predecessors that a block has. */
@@ -740,6 +736,10 @@ stackdepth_push(basicblock ***sp, basicblock *b, int depth)
 static int
 calculate_stackdepth(cfg_builder *g)
 {
+    /* index for template_subs */
+    int nsubs;
+    /* array to keep track of the template substitutions */
+    int template_subs[MAX_TEMPLATE_NEST];
     basicblock *entryblock = g->g_entryblock;
     for (basicblock *b = entryblock; b != NULL; b = b->b_next) {
         b->b_startdepth = INT_MIN;
@@ -748,7 +748,6 @@ calculate_stackdepth(cfg_builder *g)
     if (!stack) {
         return ERROR;
     }
-
 
     int stackdepth = -1;
     int maxdepth = 0;
@@ -766,18 +765,18 @@ calculate_stackdepth(cfg_builder *g)
         for (int i = 0; i < b->b_iused; i++) {
             cfg_instr *instr = &b->b_instr[i];
             if (instr->i_opcode == PIPEARG_MARKER) {
-                if (b->b_nsubs > 255) {
+                if (nsubs > 255) {
                     PyErr_Format(PyExc_SyntaxError,
                                  "max templates exceeded (%d > 256)",
-                                 b->b_nsubs + 1);
+                                 nsubs + 1);
                     goto error;
                 }
-                b->b_template_subs[b->b_nsubs++] = depth;
+                template_subs[nsubs++] = depth;
                 instr->i_opcode = NOP;
                 continue;
             }
             else if (instr->i_opcode == PIPEARG_ENDMARKER) {
-                --b->b_nsubs;
+                --nsubs;
                 instr->i_opcode = NOP;
                 continue;
             }
@@ -786,7 +785,10 @@ calculate_stackdepth(cfg_builder *g)
                     instr->i_opcode = SWAP_N;
                 }
                 instr->i_oparg =
-                    depth - b->b_template_subs[b->b_nsubs - 1] + 1;
+                    depth - template_subs[nsubs - 1] + 1;
+                if (instr->i_opcode == SWAP_N && instr->i_oparg == 1) {
+                    instr->i_opcode = NOP;
+                }
             }
             int effect = PyCompile_OpcodeStackEffectWithJump(
                              instr->i_opcode, instr->i_oparg, 0);
@@ -1859,7 +1861,7 @@ scan_block_for_locals(basicblock *b, basicblock ***sp)
         if (instr->i_oparg >= 64) {
             continue;
         }
-        assert(instr->i_oparg >= 0);
+        assert(instr->i_oparg >= 0 || instr->i_opcode == COPY);
         uint64_t bit = (uint64_t)1 << instr->i_oparg;
         switch (instr->i_opcode) {
             case DELETE_FAST:

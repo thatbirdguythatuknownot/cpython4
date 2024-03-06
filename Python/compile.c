@@ -5029,7 +5029,7 @@ update_start_location_to_match_attr(struct compiler *c, location loc,
 static int
 maybe_optimize_method_call(struct compiler *c, expr_ty e, jump_target_label l)
 {
-    int made_here;
+    int made_here = 0;
     Py_ssize_t argsl, i, kwdsl;
     expr_ty meth = e->v.Call.func;
     asdl_expr_seq *args = e->v.Call.args;
@@ -5077,17 +5077,35 @@ maybe_optimize_method_call(struct compiler *c, expr_ty e, jump_target_label l)
         loc = update_start_location_to_match_attr(c, loc, meth);
         ADDOP(c, loc, NOP);
     } else {
+        int made_here_2 = 0;
         if ((made_here = e->v.Call.aware && !IS_LABEL(l))) {
             NEW_JUMP_TARGET_LABEL(c, l2);
             l = l2;
         }
+        if ((made_here_2 = meth->v.Attribute.aware &&
+             (!IS_LABEL(l) || !e->v.Call.aware)))
+        {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
         compiler_visit_noneaware(c, meth->v.Attribute.value, l);
-        if (e->v.Call.aware) {
+        if (meth->v.Attribute.aware) {
             ADDOP_I(c, loc, COPY, 1);
             ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
         }
         loc = update_start_location_to_match_attr(c, loc, meth);
         ADDOP_NAME(c, loc, LOAD_METHOD, meth->v.Attribute.attr, names);
+        if (made_here_2) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            ADDOP_JUMP(c, loc, JUMP, l2);
+            USE_LABEL(c, l);
+            ADDOP(c, loc, PUSH_NULL);
+            USE_LABEL(c, l2);
+        }
+        if (e->v.Call.aware) {
+            ADDOP_I(c, loc, COPY, 2);
+            ADDOP_JUMP(c, loc, POP_POPJUMP_IF_NONE, l);
+        }
     }
 
     VISIT_SEQ(c, expr, e->v.Call.args);
@@ -5132,7 +5150,7 @@ validate_keywords(struct compiler *c, asdl_keyword_seq *keywords)
 static int
 compiler_call(struct compiler *c, expr_ty e, jump_target_label l)
 {
-    int made_here;
+    int made_here = 0;
 
     RETURN_IF_ERROR(validate_keywords(c, e->v.Call.keywords));
     int ret = maybe_optimize_method_call(c, e, l);
@@ -6287,7 +6305,7 @@ compiler_template(struct compiler *c, expr_ty e)
 static int
 compiler_visit_noneaware(struct compiler *c, expr_ty e, jump_target_label l)
 {
-    int made_here;
+    int made_here = 0;
     location loc = LOC(e);
     switch (e->kind) {
     case Attribute_kind:
@@ -6848,7 +6866,7 @@ compiler_warn(struct compiler *c, location loc,
 static int
 compiler_subscript(struct compiler *c, expr_ty e, jump_target_label l)
 {
-    int made_here;
+    int made_here = 0;
     location loc = LOC(e);
     expr_context_ty ctx = e->v.Subscript.ctx;
     int op = 0;

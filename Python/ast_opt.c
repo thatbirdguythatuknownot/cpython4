@@ -690,6 +690,7 @@ fold_compare(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 #define CALL_SEQ(FUNC, TYPE, ARG) { \
     int i; \
     asdl_ ## TYPE ## _seq *seq = (ARG); /* avoid variable capture */ \
+    fprintf(stderr, "%s:%s:%s:%zd\n", #FUNC, #TYPE, #ARG, asdl_seq_LEN(seq)); \
     for (i = 0; i < asdl_seq_LEN(seq); i++) { \
         TYPE ## _ty elt = (TYPE ## _ty)asdl_seq_GET(seq, i); \
         if (elt != NULL && !FUNC(elt, ptr, sub, state)) \
@@ -1100,6 +1101,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
             Py_Is(e->v.Constant.value, Py_None)) \
         { \
             COPY_NODE(node_, e); \
+            break; \
         } \
     }
 

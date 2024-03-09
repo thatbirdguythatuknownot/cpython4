@@ -944,6 +944,52 @@ fold_compassign(stmt_ty node, PyArena *arena, _PyASTOptimizeState *state)
 #undef CALL_OPT
 #undef CALL_SEQ
 
+static int
+fold_slice(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
+{
+    PyObject *olower = NULL;
+    PyObject *oupper = NULL;
+    PyObject *ostep = NULL;
+    expr_ty lower = node->v.Slice.lower;
+    expr_ty upper = node->v.Slice.upper;
+    expr_ty step = node->v.Slice.step;
+
+    if (lower && lower->kind != Constant_kind ||
+        upper && upper->kind != Constant_kind ||
+        step && step->kind != Constant_kind)
+    {
+        return 1;
+    }
+
+    if (lower) {
+        olower = lower->v.Constant.value;
+    }
+
+    if (upper) {
+        oupper = upper->v.Constant.value;
+    }
+
+    if (step) {
+        ostep = step->v.Constant.value;
+    }
+
+    PyObject *res = PySlice_New(olower, oupper, ostep);
+    if (res == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_KeyboardInterrupt)) {
+            return 0;
+        }
+        PyErr_Clear();
+        return 1;
+    }
+
+    if (PyObject_Hash(res) == -1) {
+        PyErr_Clear();
+        return 1;
+    }
+
+    return make_const(node, res, arena);
+}
+
 static int astfold_mod(mod_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_arguments(arguments_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
@@ -1134,6 +1180,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.lower);
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.upper);
         CALL_OPT(astfold_expr, expr_ty, node_->v.Slice.step);
+        CALL(fold_slice, expr_ty, node_);
         break;
     case List_kind:
         CALL_SEQ(astfold_expr, expr, node_->v.List.elts);

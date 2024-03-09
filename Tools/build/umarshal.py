@@ -31,6 +31,7 @@ class Type:
     UNKNOWN             = ord('?')
     SET                 = ord('<')
     FROZENSET           = ord('>')
+    SLICE               = ord(':')
     ASCII               = ord('a')
     ASCII_INTERNED      = ord('A')
     SMALL_TUPLE         = ord(')')
@@ -296,6 +297,14 @@ class Reader:
             n = self.r_long()
             retval = self.refs[n]
             assert retval is not None
+            return retval
+        elif type == Type.SLICE:
+            low = self.r_object()
+            up = self.r_object()
+            step = self.r_object()
+            if step == NULL:
+                step = None
+            retval = R_REF(slice(low, up, step))
             return retval
         else:
             breakpoint()

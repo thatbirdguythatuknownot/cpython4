@@ -377,7 +377,7 @@ param[arg_ty]: a=NAME b=annotation? { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
 param_star_annotation[arg_ty]: a=NAME b=star_annotation { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
 annotation[expr_ty]: ':' a=expression { a }
 star_annotation[expr_ty]: ':' a=star_expression { a }
-default[expr_ty]: '=' a=expression { a } | invalid_default
+default[expr_ty]: '=' a=(simple_slice | expression) { a } | invalid_default
 
 # If statement
 # ------------
@@ -793,6 +793,7 @@ star_named_expressions[asdl_expr_seq*]: a[asdl_expr_seq*]=','.star_named_express
 
 star_named_expression[expr_ty]:
     | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
+    | simple_slice
     | named_expression
 
 assignment_expression[expr_ty]:
@@ -930,7 +931,7 @@ await_primary[expr_ty] (memo):
 
 primary[expr_ty]:
     | a=primary n='?'? '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
-    | a=primary n='?'? b=(genexp | tuplecomp | slice_literal) {
+    | a=primary n='?'? b=(genexp | tuplecomp) {
         _PyAST_Call(a,
                     CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)),
                     NULL,
@@ -954,9 +955,6 @@ slice[expr_ty]: simple_slice | named_expression
 simple_slice[expr_ty]:
     | a=[expression] ':' b=[expression] c=[':' d=[expression] { d }] { _PyAST_Slice(a, b, c, EXTRA) }
 
-slice_literal[expr_ty]:
-    | '(' a=simple_slice ')' { a }
-
 atom[expr_ty]:
     | NAME
     | 'True' { _PyAST_Constant(Py_True, NULL, EXTRA) }
@@ -968,13 +966,13 @@ atom[expr_ty]:
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
     | &(STRING|FSTRING_START) strings
     | NUMBER
-    | &'(' (tuple | group | genexp | tuplecomp | slice_literal)
+    | &'(' (tuple | group | genexp | tuplecomp)
     | &'[' (list | listcomp)
     | &'{' (dict | set | dictcomp | setcomp)
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }
 
 group[expr_ty]:
-    | '(' a=(yield_expr | named_expression) ')' { a }
+    | '(' a=(yield_expr | simple_slice | named_expression) ')' { a }
     | invalid_group
 
 # Lambda functions
@@ -1127,7 +1125,7 @@ arguments[expr_ty] (memo):
     | invalid_arguments
 
 args[expr_ty]:
-    | a[asdl_expr_seq*]=','.(starred_expression | ( assignment_expression | expression !':=') !'=')+ b=[',' k=kwargs {k}] {
+    | a[asdl_expr_seq*]=','.(starred_expression | simple_slice | ( assignment_expression | expression !':=') !'=')+ b=[',' k=kwargs {k}] {
         _PyPegen_collect_call_seqs(p, a, b, EXTRA) }
     | a=kwargs { _PyAST_Call(_PyPegen_dummy_name(p),
                           CHECK_NULL_ALLOWED(asdl_expr_seq*, _PyPegen_seq_extract_starred_exprs(p, a)),
@@ -1146,13 +1144,13 @@ starred_expression[expr_ty]:
 
 kwarg_or_starred[KeywordOrStarred*]:
     | invalid_kwarg
-    | a=NAME '=' b=expression? {
+    | a=NAME '=' b=(simple_slice | expression)? {
         _PyPegen_keyword_or_starred(p, CHECK(keyword_ty, _PyAST_keyword(a->v.Name.id, b, EXTRA)), 1) }
     | a=starred_expression { _PyPegen_keyword_or_starred(p, a, 0) }
 
 kwarg_or_double_starred[KeywordOrStarred*]:
     | invalid_kwarg
-    | a=NAME '=' b=expression? {
+    | a=NAME '=' b=(simple_slice | expression)? {
         _PyPegen_keyword_or_starred(p, CHECK(keyword_ty, _PyAST_keyword(a->v.Name.id, b, EXTRA)), 1) }
     | '**' a=expression { _PyPegen_keyword_or_starred(p, CHECK(keyword_ty, _PyAST_keyword(NULL, a, EXTRA)), 1) }
 
@@ -1202,7 +1200,7 @@ single_subscript_attribute_target[expr_ty]:
 t_primary[expr_ty]:
     | a=t_primary n='?'? '.' b=NAME &t_lookahead { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
     | a=t_primary n='?'? '[' b=slices ']' &t_lookahead { _PyAST_Subscript(a, b, Load, n != NULL, EXTRA) }
-    | a=t_primary n='?'? b=(genexp | tuplecomp | slice_literal) &t_lookahead {
+    | a=t_primary n='?'? b=(genexp | tuplecomp) &t_lookahead {
         _PyAST_Call(a, CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)), NULL, n != NULL, EXTRA) }
     | a=t_primary n='?'? '(' b=[arguments] ')' &t_lookahead {
         _PyAST_Call(a,

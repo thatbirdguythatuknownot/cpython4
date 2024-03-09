@@ -68,6 +68,7 @@ module marshal
 #define TYPE_UNKNOWN            '?'
 #define TYPE_SET                '<'
 #define TYPE_FROZENSET          '>'
+#define TYPE_SLICE              ':'
 #define FLAG_REF                '\x80' /* with a type, add obj to index */
 
 #define TYPE_ASCII              'a'
@@ -591,6 +592,13 @@ w_complex_object(PyObject *v, char flag, WFILE *p)
         W_TYPE(TYPE_STRING, p);
         w_pstring(view.buf, view.len, p);
         PyBuffer_Release(&view);
+    }
+    else if (PySlice_Check(v)) {
+        PySliceObject *s = (PySliceObject *)v;
+        W_TYPE(TYPE_SLICE, p);
+        w_object(s->start, p);
+        w_object(s->stop, p);
+        w_object(s->step, p);
     }
     else {
         W_TYPE(TYPE_UNKNOWN, p);
@@ -1512,6 +1520,37 @@ r_object(RFILE *p)
             break;
         }
         retval = Py_NewRef(v);
+        break;
+
+    case TYPE_SLICE:
+        {
+            PyObject *low = NULL;
+            PyObject *up = NULL;
+            PyObject *step = NULL;
+
+            low = r_object(p);
+            if (low == NULL) {
+                PyErr_SetString(PyExc_TypeError,
+                                "NULL object as start object in marshal "
+                                "data for slice");
+                break;
+            }
+            up = r_object(p);
+            if (up == NULL) {
+                PyErr_SetString(PyExc_TypeError,
+                                "NULL object as stop object in marshal "
+                                "data for slice");
+                break;
+            }
+            step = r_object(p);
+            if (step == NULL && PyErr_Occurred()) {
+                break;
+            }
+
+            v = PySlice_New(low, up, step);
+            R_REF(v);
+        }
+        retval = v;
         break;
 
     default:

@@ -372,6 +372,17 @@ class Printer:
             self.object_head("PyComplex_Type")
             self.write(f".cval = {{ {z.real}, {z.imag} }},")
         return f"&{name}.ob_base"
+    
+    def generate_slice(self, name: str, s: slice) -> str:
+        low = self.generate(name + "_start", s.start)
+        up = self.generate(name + "_stop", s.stop)
+        step = self.generate(name + "_step", s.step)
+        with self.block(f"static PySliceObject {name} =", ";"):
+            self.object_head("PySlice_Type")
+            self.write(f".start = {low},")
+            self.write(f".stop = {up},")
+            self.write(f".step = {step},")
+        return f"&{name}.ob_base"
 
     def generate_frozenset(self, name: str, fs: FrozenSet[object]) -> str:
         try:
@@ -420,6 +431,8 @@ class Printer:
             return "Py_Ellipsis"
         elif obj is None:
             return "Py_None"
+        elif isinstance(obj, slice):
+            val = self.generate_slice(name, obj)
         else:
             raise TypeError(
                 f"Cannot generate code for {type(obj).__name__} object")

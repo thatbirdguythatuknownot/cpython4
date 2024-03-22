@@ -4545,13 +4545,101 @@ starunpack_helper(struct compiler *c, location loc,
 }
 
 static int
-unpack_helper(struct compiler *c, location loc, asdl_expr_seq *elts)
+flatten_seq_len(struct compiler *c, location loc, asdl_expr_seq *elts,
+                Py_ssize_t *n)
 {
-    Py_ssize_t n = asdl_seq_LEN(elts);
+    /* Compute the overall length of the flattened sequence and
+       also check for duplicate starred expressions.
+       Returns -1 on error, 0 if the sequence is already flattened,
+       1 if flattening was done.
+    */
+    assert(n != NULL);
+    *n = asdl_seq_LEN(elts);
+
+    int has_change = 0;
+    int seen_star = 0;
+    for (Py_ssize_t i = 0; i < asdl_seq_LEN(elts); i++) {
+        expr_ty elt = asdl_seq_GET(elts, i);
+        if (elt->kind == Starred_kind) {
+            expr_ty val = elt->v.Starred.value;
+            if (val->kind == Tuple_kind) {
+                has_change = 1;
+                Py_ssize_t m;
+                if (flatten_seq_len(c, loc, val->v.Tuple.elts, &m) < 0) {
+                    return -1;
+                }
+                *n += m - 1;
+            }
+            else if (val->kind == List_kind) {
+                has_change = 1;
+                Py_ssize_t m;
+                if (flatten_seq_len(c, loc, val->v.List.elts, &m) < 0) {
+                    return -1;
+                }
+                *n += m - 1;
+            }
+            else if (!seen_star) {
+                seen_star = 1;
+            }
+            else {
+                compiler_error(c, loc,
+                    "multiple starred expressions in assignment");
+                return -1;
+            }
+        }
+    }
+
+    return has_change;
+}
+
+static void
+flatextend_seq(asdl_expr_seq *old, asdl_expr_seq *new, Py_ssize_t *idx)
+{
+    /* Flatten `old` and put the new elements into `new`. */
+    assert(idx != NULL);
+
+    for (Py_ssize_t i = 0; i < asdl_seq_LEN(old); i++) {
+        expr_ty elt = asdl_seq_GET(old, i);
+        if (elt->kind == Starred_kind) {
+            expr_ty val = elt->v.Starred.value;
+            if (val->kind == Tuple_kind) {
+                flatextend_seq(val->v.Tuple.elts, new, idx);
+                continue;
+            }
+            else if (val->kind == List_kind) {
+                flatextend_seq(val->v.List.elts, new, idx);
+                continue;
+            }
+        }
+        asdl_seq_SET(new, (*idx)++, elt);
+    }
+}
+
+static int
+unpack_helper(struct compiler *c, location loc, asdl_expr_seq **elts)
+{
+    Py_ssize_t n;
+    int changed = flatten_seq_len(c, loc, *elts, &n);
+    if (changed < 0) {
+        return ERROR;
+    }
+    if (changed) {
+        asdl_expr_seq *temp = _Py_asdl_expr_seq_new(n, c->c_arena);
+        if (!temp) {
+            return compiler_error(c, loc,
+                "failed to flatten starred sequence in assignment");
+        }
+
+        Py_ssize_t i = 0;
+        flatextend_seq(*elts, temp, &i);
+        assert(i == n);
+        *elts = temp;
+    }
+
     int seen_star = 0;
     for (Py_ssize_t i = 0; i < n; i++) {
-        expr_ty elt = asdl_seq_GET(elts, i);
-        if (elt->kind == Starred_kind && !seen_star) {
+        expr_ty elt = asdl_seq_GET(*elts, i);
+        if (elt->kind == Starred_kind) {
             if ((i >= (1 << 8)) ||
                 (n-i-1 >= (INT_MAX >> 8))) {
                 return compiler_error(c, loc,
@@ -4560,10 +4648,6 @@ unpack_helper(struct compiler *c, location loc, asdl_expr_seq *elts)
             }
             ADDOP_I(c, loc, UNPACK_EX, (i + ((n-i-1) << 8)));
             seen_star = 1;
-        }
-        else if (elt->kind == Starred_kind) {
-            return compiler_error(c, loc,
-                "multiple starred expressions in assignment");
         }
     }
     if (!seen_star) {
@@ -4575,8 +4659,8 @@ unpack_helper(struct compiler *c, location loc, asdl_expr_seq *elts)
 static int
 assignment_helper(struct compiler *c, location loc, asdl_expr_seq *elts)
 {
+    RETURN_IF_ERROR(unpack_helper(c, loc, &elts));
     Py_ssize_t n = asdl_seq_LEN(elts);
-    RETURN_IF_ERROR(unpack_helper(c, loc, elts));
     for (Py_ssize_t i = 0; i < n; i++) {
         expr_ty elt = asdl_seq_GET(elts, i);
         VISIT(c, expr, elt->kind != Starred_kind ? elt : elt->v.Starred.value);

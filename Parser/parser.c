@@ -21043,7 +21043,7 @@ kwarg_or_double_starred_rule(Parser *p)
     return _res;
 }
 
-// star_targets: star_target !',' | star_target ((',' star_target))* ','?
+// star_targets: !'*' star_target !',' | star_target ((',' star_target))* ','?
 static expr_ty
 star_targets_rule(Parser *p)
 {
@@ -21066,20 +21066,22 @@ star_targets_rule(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
-    { // star_target !','
+    { // !'*' star_target !','
         if (p->error_indicator) {
             p->level--;
             return NULL;
         }
-        D(fprintf(stderr, "%*c> star_targets[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "star_target !','"));
+        D(fprintf(stderr, "%*c> star_targets[%d-%d]: %s\n", p->level, ' ', _mark, p->mark, "!'*' star_target !','"));
         expr_ty a;
         if (
+            _PyPegen_lookahead_with_int(0, _PyPegen_expect_token, p, 16)  // token='*'
+            &&
             (a = star_target_rule(p))  // star_target
             &&
             _PyPegen_lookahead_with_int(0, _PyPegen_expect_token, p, 12)  // token=','
         )
         {
-            D(fprintf(stderr, "%*c+ star_targets[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "star_target !','"));
+            D(fprintf(stderr, "%*c+ star_targets[%d-%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, "!'*' star_target !','"));
             _res = a;
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
@@ -21090,7 +21092,7 @@ star_targets_rule(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s star_targets[%d-%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "star_target !','"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, "!'*' star_target !','"));
     }
     { // star_target ((',' star_target))* ','?
         if (p->error_indicator) {

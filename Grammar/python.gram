@@ -1162,7 +1162,7 @@ kwarg_or_double_starred[KeywordOrStarred*]:
 
 # NOTE: star_targets may contain *bitwise_or, targets may not.
 star_targets[expr_ty]:
-    | a=star_target !',' { a }
+    | !'*' a=star_target !',' { a }
     | a=star_target b=(',' c=star_target { c })* [','] {
         _PyAST_Tuple(CHECK(asdl_expr_seq*, _PyPegen_seq_insert_in_front(p, a, b)), Store, EXTRA) }
 

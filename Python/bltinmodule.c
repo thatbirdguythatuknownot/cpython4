@@ -2587,9 +2587,11 @@ sum as builtin_sum
     /
     start: object(c_default="NULL") = 0
 
-Return the sum of a 'start' value (default: 0) plus an iterable of numbers
+Return the sum of a 'start' value (default: 0) plus an iterable of numbers,
+or when given a number as "iterable", the sum of the first number integers
+from start.
 
-When the iterable is empty, return the start value.
+When the iterable is empty or 0, return the start value.
 This function is intended specifically for use with numeric values and may
 reject non-numeric types.
 [clinic start generated code]*/
@@ -2601,12 +2603,66 @@ builtin_sum_impl(PyObject *module, PyObject *iterable, PyObject *start)
     PyObject *result = start;
     PyObject *temp, *item, *iter;
 
+    if (PyLong_CheckExact(iterable) && (!start || PyLong_CheckExact(start))) {
+        /* Range sum path. */
+        size_t num_n_bits = _PyLong_NumBits(iterable);
+        if (num_n_bits == 0) {
+            return _PyLong_GetZero();
+        }
+
+        if (_PyLong_DigitCount((PyLongObject *)iterable) > 1 ||
+            start && _PyLong_DigitCount((PyLongObject *)start) > 1)
+        {
+            goto object_compute;
+        }
+
+        size_t num_start_bits = start ? _PyLong_NumBits(start) : 0;
+        size_t num_max_bits = Py_MAX(num_n_bits, num_start_bits*2);
+
+        if (num_max_bits + num_n_bits + 1 > 8*SIZEOF_LONG_LONG) {
+            goto object_compute;
+        }
+
+        unsigned long long n = PyLong_AsUnsignedLongLong(iterable);
+        if (n == -1 && PyErr_Occurred()) {
+            return NULL;
+        }
+
+        unsigned long long res = 0;
+        if (start) {
+            res = PyLong_AsUnsignedLongLong(start);
+            if (res == -1 && PyErr_Occurred()) {
+                return NULL;
+            }
+        }
+
+        return PyLong_FromUnsignedLongLong(n * (res + res+n - 1) / 2);
+
+    object_compute:
+        PyObject *temp;
+
+#define DO_OPERATION(OP, RHS) \
+        temp = _PyLong_ ## OP ((PyLongObject *)start, (PyLongObject *)(RHS)); \
+        if (temp == NULL) { \
+            return NULL; \
+        } \
+        start = temp; \
+
+        DO_OPERATION(Add, start);
+        DO_OPERATION(Add, iterable);
+        DO_OPERATION(Subtract, _PyLong_GetOne());
+        DO_OPERATION(Multiply, iterable);
+
+        return _PyLong_Rshift(start, 2);
+#undef DO_OPERATION
+    }
+
     iter = PyObject_GetIter(iterable);
     if (iter == NULL)
         return NULL;
 
     if (result == NULL) {
-        result = PyLong_FromLong(0);
+        result = _PyLong_GetZero();
         if (result == NULL) {
             Py_DECREF(iter);
             return NULL;

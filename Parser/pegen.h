@@ -4,6 +4,7 @@
 #include <Python.h>
 #include <pycore_ast.h>
 #include <pycore_token.h>
+#include "tokenizer.h"
 
 #if 0
 #define PyPARSE_YIELD_IS_KEYWORD        0x0001

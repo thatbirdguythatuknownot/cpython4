@@ -377,7 +377,7 @@ param[arg_ty]: a=NAME b=annotation? { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
 param_star_annotation[arg_ty]: a=NAME b=star_annotation { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
 annotation[expr_ty]: ':' a=expression { a }
 star_annotation[expr_ty]: ':' a=star_expression { a }
-default[expr_ty]: '=' a=(simple_slice | expression) { a } | invalid_default
+default[expr_ty]: '=' a=expression { a } | invalid_default
 
 # If statement
 # ------------
@@ -796,6 +796,11 @@ star_named_expression[expr_ty]:
     | simple_slice
     | named_expression
 
+star_assignment_expression[expr_ty]:
+    | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
+    | simple_slice
+    | assignment_expression
+
 assignment_expression[expr_ty]:
     | a=star_target ':=' ~ b=expression {
         CHECK_VERSION(expr_ty, 8, "Assignment expressions are",
@@ -972,7 +977,7 @@ atom[expr_ty]:
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }
 
 group[expr_ty]:
-    | '(' a=(yield_expr | simple_slice | named_expression) ')' { a }
+    | '(' a=(yield_expr | slice) ')' { a }
     | invalid_group
 
 # Lambda functions
@@ -1102,7 +1107,7 @@ listcomp[expr_ty]:
     | invalid_comprehension
 
 tuplecomp[expr_ty]:
-    | '(' a=named_expression b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
+    | '(' a=( assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
 setcomp[expr_ty]:
@@ -1267,7 +1272,7 @@ invalid_arguments:
     | a=expression b=for_if_clauses ',' [args | expression for_if_clauses] {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, _PyPegen_get_last_comprehension_item(PyPegen_last_item(b, comprehension_ty)), "Generator expression must be parenthesized") }
     | a=NAME b='=' expression for_if_clauses {
-        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid syntax. Maybe you meant '==' or ':=' instead of '='?")}
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid arg syntax. Maybe you meant '==' or ':=' instead of '='?")}
     | (args ',')? a=NAME b='=' &(',' | ')') {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "expected argument value expression")}
     | a=args b=for_if_clauses { _PyPegen_nonparen_genexp_in_call(p, a, b) }
@@ -1278,7 +1283,7 @@ invalid_kwarg:
     | a[Token*]=('True'|'False'|'None') b='=' {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "cannot assign to %s", PyBytes_AS_STRING(a->bytes)) }
     | a=NAME b='=' expression for_if_clauses {
-        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid syntax. Maybe you meant '==' or ':=' instead of '='?")}
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid kwarg syntax. Maybe you meant '==' or ':=' instead of '='?")}
     | !(NAME '=') a=expression b='=' {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(
             a, b, "expression cannot contain assignment, perhaps you meant \"==\"?") }
@@ -1310,7 +1315,7 @@ invalid_named_expression(memo):
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(
             a, "cannot use assignment expressions with %s", _PyPegen_get_expr_name(a)) }
     | a=NAME '=' b=bitwise_or !('='|':=') {
-        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid syntax. Maybe you meant '==' or ':=' instead of '='?") }
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid named expression syntax. Maybe you meant '==' or ':=' instead of '='?") }
     | !(list|tuple|genexp|'True'|'None'|'False') a=bitwise_or b='=' bitwise_or !('='|':=') {
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "cannot assign to %s here. Maybe you meant '==' instead of '='?",
                                           _PyPegen_get_expr_name(a)) }
@@ -1350,12 +1355,7 @@ invalid_comprehension:
     | ('[' | '{') a=star_named_expression ',' b=star_named_expressions for_if_clauses {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, PyPegen_last_item(b, expr_ty),
         "did you forget parentheses around the comprehension target?") }
-    | '(' a=star_named_expression ',' b=star_named_expressions for_if_clauses ',' {
-        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, PyPegen_last_item(b, expr_ty),
-        "did you forget parentheses around the comprehension target?") }
     | ('[' | '{') a=star_named_expression b=',' for_if_clauses {
-        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "did you forget parentheses around the comprehension target?") }
-    | '(' a=star_named_expression b=',' for_if_clauses ',' {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "did you forget parentheses around the comprehension target?") }
 invalid_dict_comprehension:
     | '{' a='**' bitwise_or for_if_clauses '}' {

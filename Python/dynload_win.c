@@ -330,8 +330,8 @@ dl_funcptr _PyImport_FindSharedFuncptrWindows(const char *prefix,
                 _stricmp(buffer,import_python)) {
                 PyErr_Format(PyExc_ImportError,
                              "Module use of %.150s conflicts "
-                             "with this version of Python.",
-                             import_python);
+                             "with this version of Python (%.150s).",
+                             import_python, buffer);
                 Py_BEGIN_ALLOW_THREADS
                 FreeLibrary(hDLL);
                 Py_END_ALLOW_THREADS

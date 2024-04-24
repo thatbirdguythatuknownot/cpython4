@@ -14,7 +14,7 @@ import warnings
 __all__ = [
     'get_importer', 'iter_importers', 'get_loader', 'find_loader',
     'walk_packages', 'iter_modules', 'get_data',
-    'read_code', 'extend_path',
+    'ImpImporter', 'ImpLoader', 'read_code', 'extend_path',
     'ModuleInfo',
 ]
 

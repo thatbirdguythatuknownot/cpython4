@@ -952,6 +952,33 @@ _PyPegen_add_type_comment_to_arg(Parser *p, arg_ty a, Token *tc)
                       p->arena);
 }
 
+stmt_ty
+_PyPegen_check_barry_import(Parser *p, stmt_ty s) {
+    assert(s->kind == ImportFrom_kind);
+
+    if (s->v.ImportFrom.level > 0) {
+        /* Dots are present before the name. */
+        return s;
+    }
+
+    identifier modname = s->v.ImportFrom.module;
+    if (modname &&
+        PyUnicode_CompareWithASCIIString(modname, "__future__") == 0)
+    {
+        int i;
+        for (i = 0; i < asdl_seq_LEN(s->v.ImportFrom.names); i++) {
+            alias_ty name = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
+            if (PyUnicode_CompareWithASCIIString(name->name,
+                                                 FUTURE_BARRY_AS_BDFL) == 0)
+            {
+                p->flags |= PyPARSE_BARRY_AS_BDFL;
+                break;
+            }
+        }
+    }
+    return s;
+}
+
 /* Checks if the NOTEQUAL token is valid given the current parser flags
 0 indicates success and nonzero indicates failure (an exception may be set) */
 int

@@ -86,6 +86,7 @@ module Python
          | JoinedStr(expr* values)
          | Constant(constant value, string? kind)
          | Template(int last)
+         | CompoundExpr(stmt value)
 
          -- the following expression can appear in assignment context
          | Attribute(expr value, identifier attr, expr_context ctx, int aware)

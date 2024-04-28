@@ -2144,6 +2144,9 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         break;
     case Template_kind:
         break;
+    case CompoundExpr_kind:
+        VISIT(st, stmt, e->v.CompoundExpr.value);
+        break;
     }
     VISIT_QUIT(st, 1);
 }

@@ -388,8 +388,9 @@ enum _expr_kind {BoolOp_kind=1, NamedExpr_kind=2, BinOp_kind=3, UnaryOp_kind=4,
                   Await_kind=15, Yield_kind=16, YieldFrom_kind=17,
                   Compare_kind=18, Call_kind=19, FormattedValue_kind=20,
                   JoinedStr_kind=21, Constant_kind=22, Template_kind=23,
-                  Attribute_kind=24, Subscript_kind=25, Starred_kind=26,
-                  Name_kind=27, List_kind=28, Tuple_kind=29, Slice_kind=30};
+                  CompoundExpr_kind=24, Attribute_kind=25, Subscript_kind=26,
+                  Starred_kind=27, Name_kind=28, List_kind=29, Tuple_kind=30,
+                  Slice_kind=31};
 struct _expr {
     enum _expr_kind kind;
     union {
@@ -508,6 +509,10 @@ struct _expr {
         struct {
             int last;
         } Template;
+
+        struct {
+            stmt_ty value;
+        } CompoundExpr;
 
         struct {
             expr_ty value;
@@ -885,6 +890,8 @@ expr_ty _PyAST_Constant(constant value, string kind, int lineno, int
                         *arena);
 expr_ty _PyAST_Template(int last, int lineno, int col_offset, int end_lineno,
                         int end_col_offset, PyArena *arena);
+expr_ty _PyAST_CompoundExpr(stmt_ty value, int lineno, int col_offset, int
+                            end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx,
                          int aware, int lineno, int col_offset, int end_lineno,
                          int end_col_offset, PyArena *arena);

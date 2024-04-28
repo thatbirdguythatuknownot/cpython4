@@ -108,6 +108,10 @@ simple_stmts[asdl_stmt_seq*]:
     | a=simple_stmt !';' NEWLINE { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) } # Not needed, there for speedup
     | a[asdl_stmt_seq*]=';'.simple_stmt+ [';'] NEWLINE { a }
 
+simple_stmts_nonewline[asdl_stmt_seq*]:
+    | a=simple_stmt !';' { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) } # Not needed, there for speedup
+    | a[asdl_stmt_seq*]=';'.simple_stmt+ [';'] { a }
+
 # NOTE: assignment MUST precede expression, else parsing a simple assignment
 # will throw a SyntaxError.
 simple_stmt[stmt_ty] (memo):
@@ -267,6 +271,10 @@ block[asdl_stmt_seq*] (memo):
     | simple_stmts
     | invalid_block
 
+block_nonewline[asdl_stmt_seq*]:
+    | NEWLINE INDENT? a=statements DEDENT? { a }
+    | simple_stmts_nonewline
+
 decorators[asdl_expr_seq*]: a[asdl_expr_seq*]=('@' f=named_expression NEWLINE { f })+ { a }
 
 # Class definitions
@@ -279,6 +287,18 @@ class_def[stmt_ty]:
 class_def_raw[stmt_ty]:
     | invalid_class_def_raw
     | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] ':' c=block {
+        _PyAST_ClassDef(a->v.Name.id,
+                     (b) ? ((expr_ty) b)->v.Call.args : NULL,
+                     (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
+                     c, NULL, t, EXTRA) }
+
+class_def_nonewline[stmt_ty]:
+    | a=decorators b=class_def_raw_nonewline { _PyPegen_class_def_decorators(p, a, b) }
+    | class_def_raw_nonewline
+
+class_def_raw_nonewline[stmt_ty]:
+    | invalid_class_def_raw_nonewline
+    | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] ':' c=block_nonewline {
         _PyAST_ClassDef(a->v.Name.id,
                      (b) ? ((expr_ty) b)->v.Call.args : NULL,
                      (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
@@ -298,6 +318,25 @@ function_def_raw[stmt_ty]:
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                         b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
     | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
+        CHECK_VERSION(
+            stmt_ty,
+            5,
+            "Async functions are",
+            _PyAST_AsyncFunctionDef(n->v.Name.id,
+                            (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                            b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
+        ) }
+
+function_def_nonewline[stmt_ty]:
+    | d=decorators f=function_def_raw_nonewline { _PyPegen_function_def_decorators(p, d, f) }
+    | function_def_raw_nonewline
+
+function_def_raw_nonewline[stmt_ty]:
+    | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+        _PyAST_FunctionDef(n->v.Name.id,
+                        (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                        b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
+    | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
         CHECK_VERSION(
             stmt_ty,
             5,
@@ -936,7 +975,7 @@ await_primary[expr_ty] (memo):
 
 primary[expr_ty]:
     | a=primary n='?'? '.' b=NAME { _PyAST_Attribute(a, b->v.Name.id, Load, n != NULL, EXTRA) }
-    | a=primary n='?'? b=(genexp | tuplecomp) {
+    | a=primary n='?'? b=(class_or_func_expr | tuplecomp | genexp) {
         _PyAST_Call(a,
                     CHECK(asdl_expr_seq*, (asdl_expr_seq*)_PyPegen_singleton_seq(p, b)),
                     NULL,
@@ -971,7 +1010,7 @@ atom[expr_ty]:
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
     | &(STRING|FSTRING_START) strings
     | NUMBER
-    | &'(' (tuple | group | genexp | tuplecomp)
+    | &'(' (class_or_func_expr | tuple | group | tuplecomp | genexp)
     | &'[' (list | listcomp)
     | &'{' (dict | set | dictcomp | setcomp)
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }
@@ -979,6 +1018,10 @@ atom[expr_ty]:
 group[expr_ty]:
     | '(' a=(yield_expr | slice) ')' { a }
     | invalid_group
+
+class_or_func_expr[expr_ty]:
+    | '(' a=( &("def" | '@' | 'async') function_def_nonewline
+            | &('class' | '@') class_def_nonewline ) ')' { _PyAST_CompoundExpr(a, EXTRA) }
 
 # Lambda functions
 # ----------------
@@ -1510,8 +1553,10 @@ invalid_for_stmt:
 invalid_def_raw:
     | ['async'] a="def" NAME '(' [params] ')' ['->' expression] ':' NEWLINE !INDENT {
         RAISE_INDENTATION_ERROR("expected an indented block after function definition on line %d", a->lineno) }
-invalid_class_def_raw:
+invalid_class_def_raw_nonewline:
     | 'class' NAME ['(' [arguments] ')'] NEWLINE { RAISE_SYNTAX_ERROR("expected ':'") }
+invalid_class_def_raw:
+    | invalid_class_def_raw_nonewline
     | a='class' NAME ['(' [arguments] ')'] ':' NEWLINE !INDENT {
         RAISE_INDENTATION_ERROR("expected an indented block after class definition on line %d", a->lineno) }
 

@@ -59,6 +59,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Comp_type);
     Py_CLEAR(state->Compare_type);
     Py_CLEAR(state->Composition_type);
+    Py_CLEAR(state->CompoundExpr_type);
     Py_CLEAR(state->Constant_type);
     Py_CLEAR(state->Continue_type);
     Py_CLEAR(state->Del_singleton);
@@ -665,6 +666,9 @@ static const char * const Constant_fields[]={
 };
 static const char * const Template_fields[]={
     "last",
+};
+static const char * const CompoundExpr_fields[]={
+    "value",
 };
 static const char * const Attribute_fields[]={
     "value",
@@ -1442,6 +1446,7 @@ init_types(struct ast_state *state)
         "     | JoinedStr(expr* values)\n"
         "     | Constant(constant value, string? kind)\n"
         "     | Template(int last)\n"
+        "     | CompoundExpr(stmt value)\n"
         "     | Attribute(expr value, identifier attr, expr_context ctx, int aware)\n"
         "     | Subscript(expr value, expr slice, expr_context ctx, int aware)\n"
         "     | Starred(expr value, expr_context ctx)\n"
@@ -1556,6 +1561,11 @@ init_types(struct ast_state *state)
                                      Template_fields, 1,
         "Template(int last)");
     if (!state->Template_type) return 0;
+    state->CompoundExpr_type = make_type(state, "CompoundExpr",
+                                         state->expr_type, CompoundExpr_fields,
+                                         1,
+        "CompoundExpr(stmt value)");
+    if (!state->CompoundExpr_type) return 0;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
                                       Attribute_fields, 4,
         "Attribute(expr value, identifier attr, expr_context ctx, int aware)");
@@ -3423,6 +3433,28 @@ _PyAST_Template(int last, int lineno, int col_offset, int end_lineno, int
 }
 
 expr_ty
+_PyAST_CompoundExpr(stmt_ty value, int lineno, int col_offset, int end_lineno,
+                    int end_col_offset, PyArena *arena)
+{
+    expr_ty p;
+    if (!value) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'value' is required for CompoundExpr");
+        return NULL;
+    }
+    p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = CompoundExpr_kind;
+    p->v.CompoundExpr.value = value;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+expr_ty
 _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
                  aware, int lineno, int col_offset, int end_lineno, int
                  end_col_offset, PyArena *arena)
@@ -5133,6 +5165,16 @@ ast2obj_expr(struct ast_state *state, void* _o)
         value = ast2obj_int(state, o->v.Template.last);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->last, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
+    case CompoundExpr_kind:
+        tp = (PyTypeObject *)state->CompoundExpr_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_stmt(state, o->v.CompoundExpr.value);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->value, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -10693,6 +10735,36 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         if (*out == NULL) goto failed;
         return 0;
     }
+    tp = state->CompoundExpr_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        stmt_ty value;
+
+        if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from CompoundExpr");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'CompoundExpr' node")) {
+                goto failed;
+            }
+            res = obj2ast_stmt(state, tmp, &value, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_CompoundExpr(value, lineno, col_offset, end_lineno,
+                                   end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
     tp = state->Attribute_type;
     isinstance = PyObject_IsInstance(obj, tp);
     if (isinstance == -1) {
@@ -13731,6 +13803,10 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Template", state->Template_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "CompoundExpr", state->CompoundExpr_type) < 0)
+        {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Attribute", state->Attribute_type) < 0) {

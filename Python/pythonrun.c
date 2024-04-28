@@ -156,8 +156,6 @@ _PyRun_InteractiveLoopObject(FILE *fp, PyObject *filename, PyCompilerFlags *flag
                 nomem_count = 0;
             }
             PyObject *exc = PyErr_GetRaisedException();
-            fprintf(stderr, "!!%s ", _PyType_Name(Py_TYPE(exc)));
-            PyObject_Print(((PyBaseExceptionObject *)exc)->args, stderr, 0);
             PyErr_SetRaisedException(exc);
             PyErr_Print();
             flush_io();

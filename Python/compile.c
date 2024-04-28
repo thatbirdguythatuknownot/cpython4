@@ -2409,7 +2409,7 @@ compiler_function_body(struct compiler *c, stmt_ty s, int is_async, Py_ssize_t f
 }
 
 static int
-compiler_function(struct compiler *c, stmt_ty s, int is_async)
+compiler_function(struct compiler *c, stmt_ty s, int is_async, int is_expr)
 {
     arguments_ty args;
     expr_ty returns;
@@ -2529,6 +2529,9 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async)
     }
 
     RETURN_IF_ERROR(compiler_apply_decorators(c, decos));
+    if (is_expr) {
+        ADDOP_I(c, loc, COPY, 1);
+    }
     return compiler_nameop(c, loc, name, Store);
 }
 
@@ -2670,7 +2673,7 @@ compiler_class_body(struct compiler *c, stmt_ty s, int firstlineno)
 }
 
 static int
-compiler_class(struct compiler *c, stmt_ty s)
+compiler_class(struct compiler *c, stmt_ty s, int is_expr)
 {
     asdl_expr_seq *decos = s->v.ClassDef.decorator_list;
 
@@ -2763,6 +2766,11 @@ compiler_class(struct compiler *c, stmt_ty s)
 
     /* 6. apply decorators */
     RETURN_IF_ERROR(compiler_apply_decorators(c, decos));
+
+    /* 6.5. if it's an expression, make a copy of it first */
+    if (is_expr) {
+        ADDOP_I(c, loc, COPY, 1);
+    }
 
     /* 7. store into <name> */
     RETURN_IF_ERROR(compiler_nameop(c, loc, s->v.ClassDef.name, Store));
@@ -4116,9 +4124,9 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
 
     switch (s->kind) {
     case FunctionDef_kind:
-        return compiler_function(c, s, 0);
+        return compiler_function(c, s, 0, 0);
     case ClassDef_kind:
-        return compiler_class(c, s);
+        return compiler_class(c, s, 0);
     case TypeAlias_kind:
         return compiler_typealias(c, s);
     case Return_kind:
@@ -4200,7 +4208,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case With_kind:
         return compiler_with(c, s, 0);
     case AsyncFunctionDef_kind:
-        return compiler_function(c, s, 1);
+        return compiler_function(c, s, 1, 0);
     case AsyncWith_kind:
         return compiler_async_with(c, s, 0);
     case AsyncFor_kind:
@@ -6547,6 +6555,21 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         return compiler_composition(c, e);
     case Template_kind:
         return compiler_template(c, e);
+    case CompoundExpr_kind: {
+        stmt_ty s = e->v.CompoundExpr.value;
+        switch (s->kind) {
+        case FunctionDef_kind:
+        case AsyncFunctionDef_kind:
+            return compiler_function(
+                c, s, s->kind == AsyncFunctionDef_kind, 1);
+        case ClassDef_kind:
+            return compiler_class(c, s, 1);
+        default:
+            return compiler_error(c, loc,
+                "invalid compound expression");
+        }
+        return SUCCESS;
+    }
     case Call_kind:
     /* The following exprs can be assignment targets. */
     case Attribute_kind:

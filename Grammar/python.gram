@@ -810,9 +810,9 @@ expressions[expr_ty]:
 expression[expr_ty] (memo):
     | invalid_expression
     | invalid_legacy_expression
+    | lambdef
     | a=disjunction 'if' b=disjunction 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
     | disjunction
-    | lambdef
 
 yield_expr[expr_ty]:
     | 'yield' 'from' a=expression { _PyAST_YieldFrom(a, EXTRA) }
@@ -827,6 +827,12 @@ star_expressions[expr_ty]:
 star_expression[expr_ty] (memo):
     | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
     | expression
+
+# Special-case for `|`-style lambdas.
+
+star_sum[expr_ty] (memo):
+    | '*' a=sum { _PyAST_Starred(a, Load, EXTRA) }
+    | sum
 
 star_named_expressions[asdl_expr_seq*]: a[asdl_expr_seq*]=','.star_named_expression+ [','] { a }
 
@@ -1088,19 +1094,18 @@ lambda_param_maybe_default[NameDefaultPair*]:
 lambda_param[arg_ty]: a=NAME { _PyAST_arg(a->v.Name.id, NULL, NULL, EXTRA) }
 
 lambda_sum_parameters[arguments_ty]:
-    | a=lambda_sum_slash_no_default b[asdl_arg_seq*]=lambda_sum_param_no_default* c=lambda_sum_param_with_default* d=[lambda_star_etc] {
+    | a=lambda_sum_slash_no_default b[asdl_arg_seq*]=lambda_sum_param_no_default* c=lambda_sum_param_with_default* d=[lambda_sum_star_etc] {
         CHECK_VERSION(arguments_ty, 8, "Positional-only parameters are", _PyPegen_make_arguments(p, a, NULL, b, c, d)) }
-    | a=lambda_sum_slash_with_default b=lambda_sum_param_with_default* c=[lambda_star_etc] {
+    | a=lambda_sum_slash_with_default b=lambda_sum_param_with_default* c=[lambda_sum_star_etc] {
         CHECK_VERSION(arguments_ty, 8, "Positional-only parameters are", _PyPegen_make_arguments(p, NULL, a, NULL, b, c)) }
-    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ b=lambda_sum_param_with_default* c=[lambda_star_etc] {
+    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ b=lambda_sum_param_with_default* c=[lambda_sum_star_etc] {
         _PyPegen_make_arguments(p, NULL, NULL, a, b, c) }
     | a=lambda_sum_param_with_default+ b=[lambda_sum_star_etc] { _PyPegen_make_arguments(p, NULL, NULL, NULL, a, b)}
     | a=lambda_sum_star_etc { _PyPegen_make_arguments(p, NULL, NULL, NULL, NULL, a) }
 
 lambda_sum_slash_no_default[asdl_arg_seq*]:
-    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ '/' ',' { a }
-    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ '/' &'|' { a }
-
+    | a[asdl_arg_seq*]=param_no_default+ '/' ',' { a }
+    | a[asdl_arg_seq*]=param_no_default+ '/' &'|' { a }
 lambda_sum_slash_with_default[SlashWithDefault*]:
     | a=lambda_sum_param_no_default* b=lambda_sum_param_with_default+ '/' ',' { _PyPegen_slash_with_default(p, (asdl_arg_seq *)a, b) }
     | a=lambda_sum_param_no_default* b=lambda_sum_param_with_default+ '/' &'|' { _PyPegen_slash_with_default(p, (asdl_arg_seq *)a, b) }
@@ -1109,23 +1114,33 @@ lambda_sum_star_etc[StarEtc*]:
     | invalid_lambda_sum_star_etc
     | '*' a=lambda_sum_param_no_default b=lambda_sum_param_maybe_default* c=[lambda_sum_kwds] {
         _PyPegen_star_etc(p, a, b, c) }
+    | '*' a=lambda_sum_param_no_default_star_annotation b=lambda_sum_param_maybe_default* c=[lambda_sum_kwds] {
+        _PyPegen_star_etc(p, a, b, c) }
     | '*' ',' b=lambda_sum_param_maybe_default+ c=[lambda_sum_kwds] {
         _PyPegen_star_etc(p, NULL, b, c) }
     | a=lambda_sum_kwds { _PyPegen_star_etc(p, NULL, NULL, a) }
 
 lambda_sum_kwds[arg_ty]:
-    | invalid_lambda_kwds
+    | invalid_kwds
     | '**' a=lambda_sum_param_no_default { a }
 
 lambda_sum_param_no_default[arg_ty]:
-    | a=lambda_param ',' { a }
-    | a=lambda_param &'|' { a }
+    | a=sum_param ',' tc=TYPE_COMMENT? { _PyPegen_add_type_comment_to_arg(p, a, tc) }
+    | a=sum_param tc=TYPE_COMMENT? &'|' { _PyPegen_add_type_comment_to_arg(p, a, tc) }
+lambda_sum_param_no_default_star_annotation[arg_ty]:
+    | a=sum_param_star_annotation ',' tc=TYPE_COMMENT? { _PyPegen_add_type_comment_to_arg(p, a, tc) }
+    | a=sum_param_star_annotation tc=TYPE_COMMENT? &'|' { _PyPegen_add_type_comment_to_arg(p, a, tc) }
 lambda_sum_param_with_default[NameDefaultPair*]:
-    | a=lambda_param c=default ',' { _PyPegen_name_default_pair(p, a, c, NULL) }
-    | a=lambda_param c=default &'|' { _PyPegen_name_default_pair(p, a, c, NULL) }
+    | a=sum_param c=sum_default ',' tc=TYPE_COMMENT? { _PyPegen_name_default_pair(p, a, c, tc) }
+    | a=sum_param c=sum_default tc=TYPE_COMMENT? &'|' { _PyPegen_name_default_pair(p, a, c, tc) }
 lambda_sum_param_maybe_default[NameDefaultPair*]:
-    | a=lambda_param c=default? ',' { _PyPegen_name_default_pair(p, a, c, NULL) }
-    | a=lambda_param c=default? &'|' { _PyPegen_name_default_pair(p, a, c, NULL) }
+    | a=sum_param c=sum_default? ',' tc=TYPE_COMMENT? { _PyPegen_name_default_pair(p, a, c, tc) }
+    | a=sum_param c=sum_default? tc=TYPE_COMMENT? &'|' { _PyPegen_name_default_pair(p, a, c, tc) }
+sum_param[arg_ty]: a=NAME b=sum_annotation? { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
+sum_param_star_annotation[arg_ty]: a=NAME b=star_sum_annotation { _PyAST_arg(a->v.Name.id, b, NULL, EXTRA) }
+sum_annotation[expr_ty]: ':' a=sum { a }
+star_sum_annotation[expr_ty]: ':' a=star_sum { a }
+sum_default[expr_ty]: '=' a=sum { a } | invalid_sum_default
 
 # LITERALS
 # ========
@@ -1401,6 +1416,8 @@ invalid_expression:
    | a='lambda' [lambda_params] b=':' &(FSTRING_MIDDLE | fstring_replacement_field)  {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "f-string: lambda expressions are not allowed without parentheses") }
 
+
+
 invalid_named_expression(memo):
     | a=expression ':=' expression {
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(
@@ -1466,6 +1483,8 @@ invalid_parameters:
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "expected comma between / and *") }
 invalid_default:
     | a='=' &(')'|',') { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "expected default value expression") }
+invalid_sum_default:
+    | a='=' &('|'|',') { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "expected default value expression") }
 invalid_star_etc:
     | a='*' (')' | ',' (')' | '**')) { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "named arguments must follow bare *") }
     | '*' ',' TYPE_COMMENT { RAISE_SYNTAX_ERROR("bare * has associated type comment") }

@@ -105,12 +105,11 @@ statement_newline[asdl_stmt_seq*]:
     | ENDMARKER { _PyPegen_interactive_exit(p) }
 
 simple_stmts[asdl_stmt_seq*]:
-    | a=simple_stmt !';' NEWLINE { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) } # Not needed, there for speedup
-    | a[asdl_stmt_seq*]=';'.simple_stmt+ [';'] NEWLINE { a }
+    | a=simple_stmts_nonewline NEWLINE { a }
 
-simple_stmts_nonewline[asdl_stmt_seq*]:
-    | a=simple_stmt !';' { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) } # Not needed, there for speedup
-    | a[asdl_stmt_seq*]=';'.simple_stmt+ [';'] { a }
+simple_stmt_complex[asdl_stmt_seq*]:
+    | parenthesized_stmt_nonewline
+    | a=simple_stmt { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) }
 
 # NOTE: assignment MUST precede expression, else parsing a simple assignment
 # will throw a SyntaxError.
@@ -143,6 +142,27 @@ compound_stmt[stmt_ty]:
     | &'while' while_stmt
     | &"switch" switch_stmt
     | match_stmt
+
+statements_nonewline[asdl_stmt_seq*]: a=statement_nonewline+ { (asdl_stmt_seq*)_PyPegen_seq_flatten(p, a) }
+
+parenthesized_stmt_nonewline[asdl_stmt_seq*]:
+    | '(' a=statement_nonewline ')' { a }
+
+statement_nonewline[asdl_stmt_seq*] (memo): a=compound_stmt_nonewline { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) } | a[asdl_stmt_seq*]=simple_stmts_nonewline { a }
+
+simple_stmts_nonewline[asdl_stmt_seq*] (memo):
+    | simple_stmt_complex !';' # Not needed, there for speedup
+    | a=';'.(b[asdl_stmt_seq*]=';'.simple_stmt+ { b } | parenthesized_stmt_nonewline)+ [';'] { (asdl_stmt_seq*)_PyPegen_seq_flatten(p, a) }
+
+compound_stmt_nonewline[stmt_ty]:
+    | &'if' if_stmt_nonewline
+    | &':' unless_stmt_nonewline
+    | &('with' | 'async') with_stmt_nonewline
+    | &('for' | 'async') for_stmt_nonewline
+    | &'try' try_stmt_nonewline
+    | &'while' while_stmt_nonewline
+    | &"switch" switch_stmt_nonewline
+    | match_stmt_nonewline
 
 # SIMPLE STATEMENTS
 # =================
@@ -271,9 +291,7 @@ block[asdl_stmt_seq*] (memo):
     | simple_stmts
     | invalid_block
 
-block_nonewline[asdl_stmt_seq*]:
-    | NEWLINE INDENT? a=statements DEDENT? { a }
-    | simple_stmts_nonewline
+block_nonewline[asdl_stmt_seq*]: statements_nonewline
 
 decorators[asdl_expr_seq*]: a[asdl_expr_seq*]=('@' f=named_expression NEWLINE { f })+ { a }
 
@@ -435,12 +453,26 @@ else_block[asdl_stmt_seq*]:
     | invalid_else_stmt
     | 'else' &&':' b=block { b }
 
+if_stmt_nonewline[stmt_ty]:
+    | 'if' a=named_expression ':' b=block_nonewline c=elif_stmt_nonewline {
+        _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
+    | 'if' a=named_expression ':' b=block_nonewline c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+elif_stmt_nonewline[stmt_ty]:
+    | 'elif' a=named_expression ':' b=block c=elif_stmt_nonewline {
+        _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
+    | 'elif' a=named_expression ':' b=block_nonewline c=[else_block_nonewline] { _PyAST_If(a, b, c, EXTRA) }
+else_block_nonewline[asdl_stmt_seq*]:
+    | 'else' &&':' b=block_nonewline { b }
+
 # While statement
 # ---------------
 
 while_stmt[stmt_ty]:
     | invalid_while_stmt
     | 'while' a=named_expression ':' b=block c=[else_block] { _PyAST_While(a, b, c, EXTRA) }
+
+while_stmt_nonewline[stmt_ty]:
+    | 'while' a=named_expression ':' b=block_nonewline c=[else_block_nonewline] { _PyAST_While(a, b, c, EXTRA) }
 
 # For statement
 # -------------
@@ -450,6 +482,13 @@ for_stmt[stmt_ty]:
     | 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
         _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
+        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | invalid_for_target
+
+for_stmt_nonewline[stmt_ty]:
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
+        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
         CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
     | invalid_for_target
 
@@ -468,6 +507,16 @@ with_stmt[stmt_ty]:
        CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
     | invalid_with_stmt
 
+with_stmt_nonewline[stmt_ty]:
+    | 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block_nonewline {
+        CHECK_VERSION(stmt_ty, 9, "Parenthesized context managers are", _PyAST_With(a, b, NULL, EXTRA)) }
+    | 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block_nonewline {
+        _PyAST_With(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
+    | 'async' 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block_nonewline {
+       CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NULL, EXTRA)) }
+    | 'async' 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block_nonewline {
+       CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+
 with_item[withitem_ty]:
     | e=expression 'as' t=star_target &(',' | ')' | ':') { _PyAST_withitem(e, t, p->arena) }
     | invalid_with_item
@@ -481,6 +530,14 @@ try_stmt[stmt_ty]:
     | 'try' &&':' b=block f=finally_block { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
     | 'try' &&':' b=block ex[asdl_excepthandler_seq*]=except_block+ el=[else_block] f=[finally_block] { _PyAST_Try(b, ex, el, f, EXTRA) }
     | 'try' &&':' b=block ex[asdl_excepthandler_seq*]=except_star_block+ el=[else_block] f=[finally_block] {
+        CHECK_VERSION(stmt_ty, 11, "Exception groups are",
+                      _PyAST_TryStar(b, ex, el, f, EXTRA)) }
+
+try_stmt_nonewline[stmt_ty]:
+    | invalid_try_stmt_nonewline
+    | 'try' &&':' b=block_nonewline f=finally_block_nonewline { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
+    | 'try' &&':' b=block_nonewline ex[asdl_excepthandler_seq*]=except_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] { _PyAST_Try(b, ex, el, f, EXTRA) }
+    | 'try' &&':' b=block_nonewline ex[asdl_excepthandler_seq*]=except_star_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] {
         CHECK_VERSION(stmt_ty, 11, "Exception groups are",
                       _PyAST_TryStar(b, ex, el, f, EXTRA)) }
 
@@ -503,6 +560,18 @@ finally_block[asdl_stmt_seq*]:
     | invalid_finally_stmt
     | 'finally' &&':' a=block { a }
 
+except_block_nonewline[excepthandler_ty]:
+    | 'except' e=expression t=['as' z=NAME { z }] ':' b=block_nonewline {
+        _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
+    | 'except' ':' b=block { _PyAST_ExceptHandler(NULL, NULL, b, EXTRA) }
+    | invalid_except_stmt_nonewline
+except_star_block_nonewline[excepthandler_ty]:
+    | 'except' '*' e=expression t=['as' z=NAME { z }] ':' b=block_nonewline {
+        _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
+    | invalid_except_stmt_nonewline
+finally_block_nonewline[asdl_stmt_seq*]:
+    | 'finally' &&':' a=block_nonewline { a }
+
 # Switch statement
 # ----------------
 
@@ -515,6 +584,17 @@ switch_stmt[stmt_ty]:
 switchcase_block[switch_case_ty]:
     | "case" exprs[asdl_expr_seq*]=','.(
         bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ ':' body=block {
+        _PyAST_switch_case(exprs, body, p->arena) }
+
+switch_stmt_nonewline[stmt_ty]:
+    | "switch" subject=named_expression ':' NEWLINE INDENT cases[asdl_switch_case_seq*]=switchcase_block_nonewline+ DEDENT {
+        _PyAST_Switch(subject, cases, EXTRA) }
+    | "switch" subject=named_expression ':' NEWLINE cases[asdl_switch_case_seq*]=switchcase_block_nonewline+ {
+        _PyAST_Switch(subject, cases, EXTRA) }
+
+switchcase_block_nonewline[switch_case_ty]:
+    | "case" exprs[asdl_expr_seq*]=','.(
+        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ ':' body=block_nonewline {
         _PyAST_switch_case(exprs, body, p->arena) }
 
 bitwiseor_pattern[expr_ty]:
@@ -576,6 +656,12 @@ match_stmt[stmt_ty]:
         CHECK_VERSION(stmt_ty, 10, "Pattern matching is", _PyAST_Match(subject, cases, EXTRA)) }
     | invalid_match_stmt
 
+match_stmt_nonewline[stmt_ty]:
+    | "match" subject=subject_expr ':' NEWLINE INDENT cases[asdl_match_case_seq*]=case_block_nonewline+ DEDENT {
+        CHECK_VERSION(stmt_ty, 10, "Pattern matching is", _PyAST_Match(subject, cases, EXTRA)) }
+    | "match" subject=subject_expr ':' NEWLINE cases[asdl_match_case_seq*]=case_block_nonewline+ {
+        CHECK_VERSION(stmt_ty, 10, "Pattern matching is", _PyAST_Match(subject, cases, EXTRA)) }
+
 subject_expr[expr_ty]:
     | value=star_named_expression ',' values=star_named_expressions? {
         _PyAST_Tuple(CHECK(asdl_expr_seq*, _PyPegen_seq_insert_in_front(p, value, values)), Load, EXTRA) }
@@ -584,6 +670,10 @@ subject_expr[expr_ty]:
 case_block[match_case_ty]:
     | invalid_case_block
     | "case" pattern=patterns guard=guard? ':' body=block {
+        _PyAST_match_case(pattern, guard, body, p->arena) }
+
+case_block_nonewline[match_case_ty]:
+    | "case" pattern=patterns guard=guard? ':' body=block_nonewline {
         _PyAST_match_case(pattern, guard, body, p->arena) }
 
 guard[expr_ty]: 'if' guard=named_expression { guard }
@@ -763,6 +853,10 @@ keyword_pattern[KeyPatternPair*]:
 
 unless_stmt[stmt_ty]:
     | ':' b=(s[asdl_stmt_seq*]=';'.simple_stmt+ [';'] { s } | block) 'unless' a=named_expression {
+        _PyAST_If(_PyAST_UnaryOp(Not, a, EXTRA), b, NULL, EXTRA) }
+
+unless_stmt_nonewline[stmt_ty]:
+    | ':' b=(simple_stmts_nonewline | block_nonewline) 'unless' a=named_expression {
         _PyAST_If(_PyAST_UnaryOp(Not, a, EXTRA), b, NULL, EXTRA) }
 
 # Type statement
@@ -1585,12 +1679,22 @@ invalid_try_stmt:
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "cannot have both 'except' and 'except*' on the same 'try'") }
     | 'try' ':' block* except_star_block+ a='except' [expression ['as' NAME]] ':' {
         RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "cannot have both 'except' and 'except*' on the same 'try'") }
+invalid_try_stmt_nonewline:
+    | 'try' ':' block_nonewline !('except' | 'finally') { RAISE_SYNTAX_ERROR("expected 'except' or 'finally' block") }
+    | 'try' ':' block_nonewline* except_block_nonewline+ a='except' b='*' expression ['as' NAME] ':' {
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "cannot have both 'except' and 'except*' on the same 'try'") }
+    | 'try' ':' block_nonewline* except_star_block_nonewline+ a='except' [expression ['as' NAME]] ':' {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "cannot have both 'except' and 'except*' on the same 'try'") }
 invalid_except_stmt:
     | 'except' '*'? a=expression ',' expressions ['as' NAME ] ':' {
         RAISE_SYNTAX_ERROR_STARTING_FROM(a, "multiple exception types must be parenthesized") }
     | a='except' '*'? expression ['as' NAME ] NEWLINE { RAISE_SYNTAX_ERROR("expected ':'") }
     | a='except' NEWLINE { RAISE_SYNTAX_ERROR("expected ':'") }
     | a='except' '*' (NEWLINE | ':') { RAISE_SYNTAX_ERROR("expected one or more exception types") }
+invalid_except_stmt_nonewline:
+    | 'except' '*'? a=expression ',' expressions ['as' NAME ] ':' {
+        RAISE_SYNTAX_ERROR_STARTING_FROM(a, "multiple exception types must be parenthesized") }
+    | a='except' '*' ':' { RAISE_SYNTAX_ERROR("expected one or more exception types") }
 invalid_finally_stmt:
     | a='finally' ':' NEWLINE !INDENT {
         RAISE_INDENTATION_ERROR("expected an indented block after 'finally' statement on line %d", a->lineno) }

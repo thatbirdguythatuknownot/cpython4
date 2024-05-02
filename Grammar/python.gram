@@ -1029,10 +1029,18 @@ class_or_func_expr[expr_ty]:
 lambdef[expr_ty]:
     | 'lambda' a=[lambda_params] ':' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+    | '|' a=[lambda_sum_params] '|' b=expression {
+        _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+    | '(' a=[params] ')' '=>' b=expression {
+        _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
 
 lambda_params[arguments_ty]:
     | invalid_lambda_parameters
     | lambda_parameters
+
+lambda_sum_params[arguments_ty]:
+    | invalid_lambda_sum_parameters
+    | lambda_sum_parameters
 
 # lambda_parameters etc. duplicates parameters but without annotations
 # or type comments, and if there's no comma after a parameter, we expect
@@ -1078,6 +1086,46 @@ lambda_param_maybe_default[NameDefaultPair*]:
     | a=lambda_param c=default? ',' { _PyPegen_name_default_pair(p, a, c, NULL) }
     | a=lambda_param c=default? &':' { _PyPegen_name_default_pair(p, a, c, NULL) }
 lambda_param[arg_ty]: a=NAME { _PyAST_arg(a->v.Name.id, NULL, NULL, EXTRA) }
+
+lambda_sum_parameters[arguments_ty]:
+    | a=lambda_sum_slash_no_default b[asdl_arg_seq*]=lambda_sum_param_no_default* c=lambda_sum_param_with_default* d=[lambda_star_etc] {
+        CHECK_VERSION(arguments_ty, 8, "Positional-only parameters are", _PyPegen_make_arguments(p, a, NULL, b, c, d)) }
+    | a=lambda_sum_slash_with_default b=lambda_sum_param_with_default* c=[lambda_star_etc] {
+        CHECK_VERSION(arguments_ty, 8, "Positional-only parameters are", _PyPegen_make_arguments(p, NULL, a, NULL, b, c)) }
+    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ b=lambda_sum_param_with_default* c=[lambda_star_etc] {
+        _PyPegen_make_arguments(p, NULL, NULL, a, b, c) }
+    | a=lambda_sum_param_with_default+ b=[lambda_sum_star_etc] { _PyPegen_make_arguments(p, NULL, NULL, NULL, a, b)}
+    | a=lambda_sum_star_etc { _PyPegen_make_arguments(p, NULL, NULL, NULL, NULL, a) }
+
+lambda_sum_slash_no_default[asdl_arg_seq*]:
+    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ '/' ',' { a }
+    | a[asdl_arg_seq*]=lambda_sum_param_no_default+ '/' &'|' { a }
+
+lambda_sum_slash_with_default[SlashWithDefault*]:
+    | a=lambda_sum_param_no_default* b=lambda_sum_param_with_default+ '/' ',' { _PyPegen_slash_with_default(p, (asdl_arg_seq *)a, b) }
+    | a=lambda_sum_param_no_default* b=lambda_sum_param_with_default+ '/' &'|' { _PyPegen_slash_with_default(p, (asdl_arg_seq *)a, b) }
+
+lambda_sum_star_etc[StarEtc*]:
+    | invalid_lambda_sum_star_etc
+    | '*' a=lambda_sum_param_no_default b=lambda_sum_param_maybe_default* c=[lambda_sum_kwds] {
+        _PyPegen_star_etc(p, a, b, c) }
+    | '*' ',' b=lambda_sum_param_maybe_default+ c=[lambda_sum_kwds] {
+        _PyPegen_star_etc(p, NULL, b, c) }
+    | a=lambda_sum_kwds { _PyPegen_star_etc(p, NULL, NULL, a) }
+
+lambda_sum_kwds[arg_ty]:
+    | invalid_lambda_kwds
+    | '**' a=lambda_sum_param_no_default { a }
+
+lambda_sum_param_no_default[arg_ty]:
+    | a=lambda_param ',' { a }
+    | a=lambda_param &'|' { a }
+lambda_sum_param_with_default[NameDefaultPair*]:
+    | a=lambda_param c=default ',' { _PyPegen_name_default_pair(p, a, c, NULL) }
+    | a=lambda_param c=default &'|' { _PyPegen_name_default_pair(p, a, c, NULL) }
+lambda_sum_param_maybe_default[NameDefaultPair*]:
+    | a=lambda_param c=default? ',' { _PyPegen_name_default_pair(p, a, c, NULL) }
+    | a=lambda_param c=default? &'|' { _PyPegen_name_default_pair(p, a, c, NULL) }
 
 # LITERALS
 # ========
@@ -1456,6 +1504,27 @@ invalid_lambda_kwds:
     | '**' lambda_param a='=' { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "var-keyword argument cannot have default value") }
     | '**' lambda_param ',' a=lambda_param { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "arguments cannot follow var-keyword argument") }
     | '**' lambda_param ',' a[Token*]=('*'|'**'|'/') { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "arguments cannot follow var-keyword argument") }
+invalid_lambda_sum_parameters:
+    | a="/" ',' {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "at least one argument must precede /") }
+    | (lambda_sum_slash_no_default | lambda_sum_slash_with_default) lambda_sum_param_maybe_default* a='/' {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "/ may appear only once") }
+    | lambda_sum_slash_no_default? lambda_sum_param_no_default* invalid_lambda_sum_parameters_helper a=lambda_sum_param_no_default {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "parameter without a default follows parameter with a default") }
+    | lambda_sum_param_no_default* a='(' ','.lambda_param+ ','? b=')' {
+        RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "Lambda expression parameters cannot be parenthesized") }
+    | (lambda_sum_slash_no_default | lambda_sum_slash_with_default)? lambda_sum_param_maybe_default* '*' (',' | lambda_sum_param_no_default) lambda_sum_param_maybe_default* a='/' {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "/ must be ahead of *") }
+    | lambda_sum_param_maybe_default+ '/' a='*' {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "expected comma between / and *") }
+invalid_lambda_sum_parameters_helper:
+    | a=lambda_sum_slash_with_default { _PyPegen_singleton_seq(p, a) }
+    | lambda_sum_param_with_default+
+invalid_lambda_sum_star_etc:
+    | '*' ('|' | ',' ('|' | '**')) { RAISE_SYNTAX_ERROR("named arguments must follow bare *") }
+    | '*' lambda_param a='=' { RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "var-positional argument cannot have default value") }
+    | '*' (lambda_sum_param_no_default | ',') lambda_sum_param_maybe_default* a='*' (lambda_sum_param_no_default | ',') {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "* argument may appear only once") }
 invalid_double_type_comments:
     | TYPE_COMMENT NEWLINE TYPE_COMMENT NEWLINE INDENT {
         RAISE_SYNTAX_ERROR("Cannot have two type comments on def") }

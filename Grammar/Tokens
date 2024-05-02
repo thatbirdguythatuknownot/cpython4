@@ -60,6 +60,7 @@ PIPEGTEQUAL             '|>='
 QMARK                   '?'
 DOUBLEQMARK             '??'
 DOUBLEQMARKEQUAL        '??='
+EQUALARROW              '=>'
 
 OP
 TYPE_IGNORE

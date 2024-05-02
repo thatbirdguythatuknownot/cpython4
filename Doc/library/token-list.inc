@@ -229,6 +229,10 @@
 
    Token value for ``"??="``.
 
+.. data:: EQUALARROW
+
+   Token value for ``"=>"``.
+
 .. data:: OP
 
 .. data:: TYPE_IGNORE

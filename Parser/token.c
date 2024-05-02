@@ -67,6 +67,7 @@ const char * const _PyParser_TokenNames[] = {
     "QMARK",
     "DOUBLEQMARK",
     "DOUBLEQMARKEQUAL",
+    "EQUALARROW",
     "OP",
     "TYPE_IGNORE",
     "TYPE_COMMENT",
@@ -174,6 +175,7 @@ _PyToken_TwoChars(int c1, int c2)
     case '=':
         switch (c2) {
         case '=': return EQEQUAL;
+        case '>': return EQUALARROW;
         }
         break;
     case '>':

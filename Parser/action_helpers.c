@@ -952,6 +952,11 @@ _PyPegen_add_type_comment_to_arg(Parser *p, arg_ty a, Token *tc)
                       p->arena);
 }
 
+int
+_PyPegen_check_braces(Parser *p) {
+    return (p->flags & PyPARSE_BRACES) != 0;
+}
+
 stmt_ty
 _PyPegen_check_barry_import(Parser *p, stmt_ty s) {
     assert(s->kind == ImportFrom_kind);

@@ -1223,8 +1223,8 @@ init_types(struct ast_state *state)
         "FunctionType(expr* argtypes, expr returns)");
     if (!state->FunctionType_type) return 0;
     state->stmt_type = make_type(state, "stmt", state->AST_type, NULL, 0,
-        "stmt = FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)\n"
-        "     | AsyncFunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)\n"
+        "stmt = FunctionDef(identifier? name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)\n"
+        "     | AsyncFunctionDef(identifier? name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)\n"
         "     | ClassDef(identifier name, expr* bases, keyword* keywords, stmt* body, expr* decorator_list, type_param* type_params)\n"
         "     | Return(expr? value)\n"
         "     | Delete(expr* targets)\n"
@@ -1263,8 +1263,10 @@ init_types(struct ast_state *state)
         return 0;
     state->FunctionDef_type = make_type(state, "FunctionDef", state->stmt_type,
                                         FunctionDef_fields, 7,
-        "FunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)");
+        "FunctionDef(identifier? name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)");
     if (!state->FunctionDef_type) return 0;
+    if (PyObject_SetAttr(state->FunctionDef_type, state->name, Py_None) == -1)
+        return 0;
     if (PyObject_SetAttr(state->FunctionDef_type, state->returns, Py_None) ==
         -1)
         return 0;
@@ -1274,8 +1276,11 @@ init_types(struct ast_state *state)
     state->AsyncFunctionDef_type = make_type(state, "AsyncFunctionDef",
                                              state->stmt_type,
                                              AsyncFunctionDef_fields, 7,
-        "AsyncFunctionDef(identifier name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)");
+        "AsyncFunctionDef(identifier? name, arguments args, stmt* body, expr* decorator_list, expr? returns, string? type_comment, type_param* type_params)");
     if (!state->AsyncFunctionDef_type) return 0;
+    if (PyObject_SetAttr(state->AsyncFunctionDef_type, state->name, Py_None) ==
+        -1)
+        return 0;
     if (PyObject_SetAttr(state->AsyncFunctionDef_type, state->returns, Py_None)
         == -1)
         return 0;
@@ -2168,11 +2173,6 @@ _PyAST_FunctionDef(identifier name, arguments_ty args, asdl_stmt_seq * body,
                    *arena)
 {
     stmt_ty p;
-    if (!name) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'name' is required for FunctionDef");
-        return NULL;
-    }
     if (!args) {
         PyErr_SetString(PyExc_ValueError,
                         "field 'args' is required for FunctionDef");
@@ -2204,11 +2204,6 @@ _PyAST_AsyncFunctionDef(identifier name, arguments_ty args, asdl_stmt_seq *
                         end_col_offset, PyArena *arena)
 {
     stmt_ty p;
-    if (!name) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'name' is required for AsyncFunctionDef");
-        return NULL;
-    }
     if (!args) {
         PyErr_SetString(PyExc_ValueError,
                         "field 'args' is required for AsyncFunctionDef");
@@ -6528,9 +6523,9 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         if (PyObject_GetOptionalAttr(obj, state->name, &tmp) < 0) {
             return 1;
         }
-        if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"name\" missing from FunctionDef");
-            return 1;
+        if (tmp == NULL || tmp == Py_None) {
+            Py_CLEAR(tmp);
+            name = NULL;
         }
         else {
             int res;
@@ -6731,9 +6726,9 @@ obj2ast_stmt(struct ast_state *state, PyObject* obj, stmt_ty* out, PyArena*
         if (PyObject_GetOptionalAttr(obj, state->name, &tmp) < 0) {
             return 1;
         }
-        if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"name\" missing from AsyncFunctionDef");
-            return 1;
+        if (tmp == NULL || tmp == Py_None) {
+            Py_CLEAR(tmp);
+            name = NULL;
         }
         else {
             int res;

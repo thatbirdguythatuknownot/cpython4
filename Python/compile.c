@@ -2361,7 +2361,7 @@ compiler_function_body(struct compiler *c, stmt_ty s, int is_async, Py_ssize_t f
     }
 
     RETURN_IF_ERROR(
-        compiler_enter_scope(c, name, scope_type, (void *)s, firstlineno));
+        compiler_enter_scope(c, name ? name : &_Py_STR(anon_lambda), scope_type, (void *)s, firstlineno));
 
     /* if not -OO mode, add docstring */
     if (c->c_optimize < 2) {
@@ -2529,10 +2529,18 @@ compiler_function(struct compiler *c, stmt_ty s, int is_async, int is_expr)
     }
 
     RETURN_IF_ERROR(compiler_apply_decorators(c, decos));
-    if (is_expr) {
-        ADDOP_I(c, loc, COPY, 1);
+
+    if (name) {
+        if (is_expr) {
+            ADDOP_I(c, loc, COPY, 1);
+        }
+        return compiler_nameop(c, loc, name, Store);
     }
-    return compiler_nameop(c, loc, name, Store);
+    else if (!is_expr) {
+        ADDOP(c, loc, POP_TOP);
+    }
+
+    return SUCCESS;
 }
 
 static int

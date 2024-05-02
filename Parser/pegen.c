@@ -740,6 +740,9 @@ compute_parser_flags(PyCompilerFlags *flags)
     if (flags->cf_flags & PyCF_ALLOW_INCOMPLETE_INPUT) {
         parser_flags |= PyPARSE_ALLOW_INCOMPLETE_INPUT;
     }
+    if (flags->cf_flags & CO_FUTURE_BRACES) {
+        parser_flags |= PyPARSE_BRACES;
+    }
     return parser_flags;
 }
 

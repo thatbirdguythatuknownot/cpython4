@@ -8,10 +8,10 @@ module Python
         | Expression(expr body)
         | FunctionType(expr* argtypes, expr returns)
 
-    stmt = FunctionDef(identifier name, arguments args,
+    stmt = FunctionDef(identifier? name, arguments args,
                        stmt* body, expr* decorator_list, expr? returns,
                        string? type_comment, type_param* type_params)
-          | AsyncFunctionDef(identifier name, arguments args,
+          | AsyncFunctionDef(identifier? name, arguments args,
                              stmt* body, expr* decorator_list, expr? returns,
                              string? type_comment, type_param* type_params)
 

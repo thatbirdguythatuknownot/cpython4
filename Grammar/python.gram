@@ -108,8 +108,8 @@ simple_stmts[asdl_stmt_seq*]:
     | a=simple_stmts_nonewline NEWLINE { a }
 
 simple_stmt_complex[asdl_stmt_seq*]:
-    | parenthesized_stmt_nonewline
     | a=simple_stmt { (asdl_stmt_seq*)_PyPegen_singleton_seq(p, a) }
+    | parenthesized_stmt_nonewline
 
 # NOTE: assignment MUST precede expression, else parsing a simple assignment
 # will throw a SyntaxError.
@@ -286,6 +286,17 @@ dotted_name[expr_ty]:
 # Common elements
 # ---------------
 
+block_entry[asdl_stmt_seq*]:
+    | ':' a=block { a }
+    | braced_block
+
+block_entry_nonewline[asdl_stmt_seq*]:
+    | ':' a=block_nonewline { a }
+    | braced_block
+
+braced_block[asdl_stmt_seq*]:
+    | '{' a=block_nonewline '}' { _PyPegen_check_braces(p) ? a : NULL }
+
 block[asdl_stmt_seq*] (memo):
     | NEWLINE INDENT a=statements DEDENT { a }
     | simple_stmts
@@ -304,7 +315,7 @@ class_def[stmt_ty]:
 
 class_def_raw[stmt_ty]:
     | invalid_class_def_raw
-    | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] ':' c=block {
+    | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] c=block_entry {
         _PyAST_ClassDef(a->v.Name.id,
                      (b) ? ((expr_ty) b)->v.Call.args : NULL,
                      (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
@@ -316,7 +327,7 @@ class_def_nonewline[stmt_ty]:
 
 class_def_raw_nonewline[stmt_ty]:
     | invalid_class_def_raw_nonewline
-    | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] ':' c=block_nonewline {
+    | 'class' a=NAME t=[type_params] b=['(' z=[arguments] ')' { z }] c=block_entry_nonewline {
         _PyAST_ClassDef(a->v.Name.id,
                      (b) ? ((expr_ty) b)->v.Call.args : NULL,
                      (b) ? ((expr_ty) b)->v.Call.keywords : NULL,
@@ -331,6 +342,22 @@ function_def[stmt_ty]:
 
 function_def_raw[stmt_ty]:
     | invalid_def_raw
+    | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+        _PyPegen_check_braces(p) ?
+        _PyAST_FunctionDef(n->v.Name.id,
+                        (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                        b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
+        : NULL }
+    | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+        _PyPegen_check_braces(p) ?
+        CHECK_VERSION(
+            stmt_ty,
+            5,
+            "Async functions are",
+            _PyAST_AsyncFunctionDef(n->v.Name.id,
+                            (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                            b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
+        ) : NULL }
     | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
         _PyAST_FunctionDef(n->v.Name.id,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
@@ -350,16 +377,32 @@ function_def_nonewline[stmt_ty]:
     | function_def_raw_nonewline
 
 function_def_raw_nonewline[stmt_ty]:
-    | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
-        _PyAST_FunctionDef(n->v.Name.id,
+    | "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+        _PyPegen_check_braces(p) ?
+        _PyAST_FunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
-                        b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
-    | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+                        b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
+        : NULL }
+    | 'async' "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+        _PyPegen_check_braces(p) ?
         CHECK_VERSION(
             stmt_ty,
             5,
             "Async functions are",
-            _PyAST_AsyncFunctionDef(n->v.Name.id,
+            _PyAST_AsyncFunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
+                            (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                            b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
+        ) : NULL }
+    | "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+        _PyAST_FunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
+                        (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                        b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
+    | 'async' "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+        CHECK_VERSION(
+            stmt_ty,
+            5,
+            "Async functions are",
+            _PyAST_AsyncFunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
                             (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                             b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         ) }
@@ -441,38 +484,38 @@ default[expr_ty]: '=' a=expression { a } | invalid_default
 
 if_stmt[stmt_ty]:
     | invalid_if_stmt
-    | 'if' a=named_expression ':' b=block c=elif_stmt {
+    | 'if' a=named_expression b=block_entry c=elif_stmt {
         _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
-    | 'if' a=named_expression ':' b=block c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+    | 'if' a=named_expression b=block_entry c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
 elif_stmt[stmt_ty]:
     | invalid_elif_stmt
-    | 'elif' a=named_expression ':' b=block c=elif_stmt {
+    | 'elif' a=named_expression b=block_entry c=elif_stmt {
         _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
-    | 'elif' a=named_expression ':' b=block c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+    | 'elif' a=named_expression b=block_entry c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
 else_block[asdl_stmt_seq*]:
     | invalid_else_stmt
-    | 'else' &&':' b=block { b }
+    | 'else' b=(braced_block | &&':' c=block { c }) { b }
 
 if_stmt_nonewline[stmt_ty]:
-    | 'if' a=named_expression ':' b=block_nonewline c=elif_stmt_nonewline {
+    | 'if' a=named_expression b=block_entry_nonewline c=elif_stmt_nonewline {
         _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
-    | 'if' a=named_expression ':' b=block_nonewline c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
+    | 'if' a=named_expression b=block_entry_nonewline c=[else_block] { _PyAST_If(a, b, c, EXTRA) }
 elif_stmt_nonewline[stmt_ty]:
-    | 'elif' a=named_expression ':' b=block c=elif_stmt_nonewline {
+    | 'elif' a=named_expression b=block_entry_nonewline c=elif_stmt_nonewline {
         _PyAST_If(a, b, CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, c)), EXTRA) }
-    | 'elif' a=named_expression ':' b=block_nonewline c=[else_block_nonewline] { _PyAST_If(a, b, c, EXTRA) }
+    | 'elif' a=named_expression b=block_entry_nonewline c=[else_block_nonewline] { _PyAST_If(a, b, c, EXTRA) }
 else_block_nonewline[asdl_stmt_seq*]:
-    | 'else' &&':' b=block_nonewline { b }
+    | 'else' b=(braced_block | &&':' c=block_nonewline { c }) { b }
 
 # While statement
 # ---------------
 
 while_stmt[stmt_ty]:
     | invalid_while_stmt
-    | 'while' a=named_expression ':' b=block c=[else_block] { _PyAST_While(a, b, c, EXTRA) }
+    | 'while' a=named_expression b=block_entry c=[else_block] { _PyAST_While(a, b, c, EXTRA) }
 
 while_stmt_nonewline[stmt_ty]:
-    | 'while' a=named_expression ':' b=block_nonewline c=[else_block_nonewline] { _PyAST_While(a, b, c, EXTRA) }
+    | 'while' a=named_expression b=block_entry_nonewline c=[else_block_nonewline] { _PyAST_While(a, b, c, EXTRA) }
 
 # For statement
 # -------------
@@ -483,6 +526,14 @@ for_stmt[stmt_ty]:
         _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
         CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
+        _PyPegen_check_braces(p) ?
+        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)
+        : NULL }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
+        _PyPegen_check_braces(p) ?
+        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA))
+        : NULL }
     | invalid_for_target
 
 for_stmt_nonewline[stmt_ty]:
@@ -490,6 +541,14 @@ for_stmt_nonewline[stmt_ty]:
         _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
         CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
+        _PyPegen_check_braces(p) ?
+        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)
+        : NULL }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
+        _PyPegen_check_braces(p) ?
+        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA))
+        : NULL }
     | invalid_for_target
 
 # With statement
@@ -497,25 +556,41 @@ for_stmt_nonewline[stmt_ty]:
 
 with_stmt[stmt_ty]:
     | invalid_with_stmt_indent
-    | 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block {
+    | 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' b=block_entry {
         CHECK_VERSION(stmt_ty, 9, "Parenthesized context managers are", _PyAST_With(a, b, NULL, EXTRA)) }
     | 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block {
         _PyAST_With(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | 'async' 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block {
+    | 'with' a[asdl_withitem_seq*]=','.with_item+ '{' tc=[TYPE_COMMENT] b=block_nonewline '}' {
+       _PyPegen_check_braces(p) ?
+       _PyAST_With(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)
+       : NULL }
+    | 'async' 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' b=block_entry {
        CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NULL, EXTRA)) }
     | 'async' 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block {
        CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'async' 'with' a[asdl_withitem_seq*]=','.with_item+ '{' tc=[TYPE_COMMENT] b=block_nonewline '}' {
+       _PyPegen_check_braces(p) ?
+       CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA))
+       : NULL }
     | invalid_with_stmt
 
 with_stmt_nonewline[stmt_ty]:
-    | 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block_nonewline {
+    | 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' b=block_entry_nonewline {
         CHECK_VERSION(stmt_ty, 9, "Parenthesized context managers are", _PyAST_With(a, b, NULL, EXTRA)) }
     | 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block_nonewline {
         _PyAST_With(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | 'async' 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' ':' b=block_nonewline {
+    | 'with' a[asdl_withitem_seq*]=','.with_item+ '{' tc=[TYPE_COMMENT] b=block_nonewline '}' {
+       _PyPegen_check_braces(p) ?
+       _PyAST_With(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)
+       : NULL }
+    | 'async' 'with' '(' a[asdl_withitem_seq*]=','.with_item+ ','? ')' b=block_entry_nonewline {
        CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NULL, EXTRA)) }
     | 'async' 'with' a[asdl_withitem_seq*]=','.with_item+ ':' tc=[TYPE_COMMENT] b=block_nonewline {
        CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'async' 'with' a[asdl_withitem_seq*]=','.with_item+ '{' tc=[TYPE_COMMENT] b=block_nonewline '}' {
+       _PyPegen_check_braces(p) ?
+       CHECK_VERSION(stmt_ty, 5, "Async with statements are", _PyAST_AsyncWith(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA))
+       : NULL }
 
 with_item[withitem_ty]:
     | e=expression 'as' t=star_target &(',' | ')' | ':') { _PyAST_withitem(e, t, p->arena) }
@@ -527,17 +602,17 @@ with_item[withitem_ty]:
 
 try_stmt[stmt_ty]:
     | invalid_try_stmt
-    | 'try' &&':' b=block f=finally_block { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
-    | 'try' &&':' b=block ex[asdl_excepthandler_seq*]=except_block+ el=[else_block] f=[finally_block] { _PyAST_Try(b, ex, el, f, EXTRA) }
-    | 'try' &&':' b=block ex[asdl_excepthandler_seq*]=except_star_block+ el=[else_block] f=[finally_block] {
+    | 'try' b=(&&':' c=block { c } | braced_block) f=finally_block { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
+    | 'try' b=(&&':' c=block { c } | braced_block) ex[asdl_excepthandler_seq*]=except_block+ el=[else_block] f=[finally_block] { _PyAST_Try(b, ex, el, f, EXTRA) }
+    | 'try' b=(&&':' c=block { c } | braced_block) ex[asdl_excepthandler_seq*]=except_star_block+ el=[else_block] f=[finally_block] {
         CHECK_VERSION(stmt_ty, 11, "Exception groups are",
                       _PyAST_TryStar(b, ex, el, f, EXTRA)) }
 
 try_stmt_nonewline[stmt_ty]:
     | invalid_try_stmt_nonewline
-    | 'try' &&':' b=block_nonewline f=finally_block_nonewline { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
-    | 'try' &&':' b=block_nonewline ex[asdl_excepthandler_seq*]=except_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] { _PyAST_Try(b, ex, el, f, EXTRA) }
-    | 'try' &&':' b=block_nonewline ex[asdl_excepthandler_seq*]=except_star_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] {
+    | 'try' b=(&&':' c=block_nonewline { c } | braced_block) f=finally_block_nonewline { _PyAST_Try(b, NULL, NULL, f, EXTRA) }
+    | 'try' b=(&&':' c=block_nonewline { c } | braced_block) ex[asdl_excepthandler_seq*]=except_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] { _PyAST_Try(b, ex, el, f, EXTRA) }
+    | 'try' b=(&&':' c=block_nonewline { c } | braced_block) ex[asdl_excepthandler_seq*]=except_star_block_nonewline+ el=[else_block_nonewline] f=[finally_block_nonewline] {
         CHECK_VERSION(stmt_ty, 11, "Exception groups are",
                       _PyAST_TryStar(b, ex, el, f, EXTRA)) }
 
@@ -547,30 +622,30 @@ try_stmt_nonewline[stmt_ty]:
 
 except_block[excepthandler_ty]:
     | invalid_except_stmt_indent
-    | 'except' e=expression t=['as' z=NAME { z }] ':' b=block {
+    | 'except' e=expression t=['as' z=NAME { z }] b=block_entry {
         _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
-    | 'except' ':' b=block { _PyAST_ExceptHandler(NULL, NULL, b, EXTRA) }
+    | 'except' b=block_entry { _PyAST_ExceptHandler(NULL, NULL, b, EXTRA) }
     | invalid_except_stmt
 except_star_block[excepthandler_ty]:
     | invalid_except_star_stmt_indent
-    | 'except' '*' e=expression t=['as' z=NAME { z }] ':' b=block {
+    | 'except' '*' e=expression t=['as' z=NAME { z }] b=block_entry {
         _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
     | invalid_except_stmt
 finally_block[asdl_stmt_seq*]:
     | invalid_finally_stmt
-    | 'finally' &&':' a=block { a }
+    | 'finally' a=(&&':' b=block { b } | braced_block) { a }
 
 except_block_nonewline[excepthandler_ty]:
-    | 'except' e=expression t=['as' z=NAME { z }] ':' b=block_nonewline {
+    | 'except' e=expression t=['as' z=NAME { z }] b=block_entry_nonewline {
         _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
-    | 'except' ':' b=block { _PyAST_ExceptHandler(NULL, NULL, b, EXTRA) }
+    | 'except' b=block_entry_nonewline { _PyAST_ExceptHandler(NULL, NULL, b, EXTRA) }
     | invalid_except_stmt_nonewline
 except_star_block_nonewline[excepthandler_ty]:
-    | 'except' '*' e=expression t=['as' z=NAME { z }] ':' b=block_nonewline {
+    | 'except' '*' e=expression t=['as' z=NAME { z }] b=block_entry_nonewline {
         _PyAST_ExceptHandler(e, (t) ? ((expr_ty) t)->v.Name.id : NULL, b, EXTRA) }
     | invalid_except_stmt_nonewline
 finally_block_nonewline[asdl_stmt_seq*]:
-    | 'finally' &&':' a=block_nonewline { a }
+    | 'finally' a=(&&':' b=block_nonewline { b } | braced_block) { a }
 
 # Switch statement
 # ----------------
@@ -583,7 +658,7 @@ switch_stmt[stmt_ty]:
 
 switchcase_block[switch_case_ty]:
     | "case" exprs[asdl_expr_seq*]=','.(
-        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ ':' body=block {
+        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ body=block_entry {
         _PyAST_switch_case(exprs, body, p->arena) }
 
 switch_stmt_nonewline[stmt_ty]:
@@ -594,7 +669,7 @@ switch_stmt_nonewline[stmt_ty]:
 
 switchcase_block_nonewline[switch_case_ty]:
     | "case" exprs[asdl_expr_seq*]=','.(
-        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ ':' body=block_nonewline {
+        bitwiseor_pattern | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) })+ body=block_entry_nonewline {
         _PyAST_switch_case(exprs, body, p->arena) }
 
 bitwiseor_pattern[expr_ty]:
@@ -669,11 +744,11 @@ subject_expr[expr_ty]:
 
 case_block[match_case_ty]:
     | invalid_case_block
-    | "case" pattern=patterns guard=guard? ':' body=block {
+    | "case" pattern=patterns guard=guard? body=block_entry {
         _PyAST_match_case(pattern, guard, body, p->arena) }
 
 case_block_nonewline[match_case_ty]:
-    | "case" pattern=patterns guard=guard? ':' body=block_nonewline {
+    | "case" pattern=patterns guard=guard? body=block_entry_nonewline {
         _PyAST_match_case(pattern, guard, body, p->arena) }
 
 guard[expr_ty]: 'if' guard=named_expression { guard }

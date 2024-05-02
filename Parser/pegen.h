@@ -23,6 +23,8 @@
 #define PyPARSE_TYPE_COMMENTS 0x0040
 #define PyPARSE_ALLOW_INCOMPLETE_INPUT 0x0100
 
+#define PyPARSE_BRACES 0x0200
+
 #define CURRENT_POS (-5)
 
 typedef struct _memo {
@@ -334,6 +336,7 @@ expr_ty _PyPegen_FetchRawForm(Parser *p, int, int, int, int);
 expr_ty _PyPegen_ensure_imaginary(Parser *p, expr_ty);
 expr_ty _PyPegen_ensure_real(Parser *p, expr_ty);
 asdl_seq *_PyPegen_join_sequences(Parser *, asdl_seq *, asdl_seq *);
+int _PyPegen_check_braces(Parser *);
 stmt_ty _PyPegen_check_barry_import(Parser *, stmt_ty);
 int _PyPegen_check_barry_as_flufl(Parser *, Token *);
 int _PyPegen_check_legacy_stmt(Parser *p, expr_ty t);

@@ -27797,9 +27797,9 @@ invalid_kwarg_rule(Parser *p)
 }
 
 // expression_without_invalid:
+//     | lambdef
 //     | disjunction 'if' disjunction 'else' expression
 //     | disjunction
-//     | lambdef
 static expr_ty
 expression_without_invalid_rule(Parser *p)
 {
@@ -27826,6 +27826,26 @@ expression_without_invalid_rule(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
+    { // lambdef
+        if (p->error_indicator) {
+            p->call_invalid_rules = _prev_call_invalid;
+            p->level--;
+            return NULL;
+        }
+        D(fprintf(stderr, "%*c> expression_without_invalid[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "lambdef"));
+        expr_ty lambdef_var;
+        if (
+            (lambdef_var = lambdef_rule(p))  // lambdef
+        )
+        {
+            D(fprintf(stderr, "%*c+ expression_without_invalid[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "lambdef"));
+            _res = lambdef_var;
+            goto done;
+        }
+        p->mark = _mark;
+        D(fprintf(stderr, "%*c%s expression_without_invalid[%d-%d L%d]: %s failed!\n", p->level, ' ',
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "lambdef"));
+    }
     { // disjunction 'if' disjunction 'else' expression
         if (p->error_indicator) {
             p->call_invalid_rules = _prev_call_invalid;
@@ -27893,26 +27913,6 @@ expression_without_invalid_rule(Parser *p)
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s expression_without_invalid[%d-%d L%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "disjunction"));
-    }
-    { // lambdef
-        if (p->error_indicator) {
-            p->call_invalid_rules = _prev_call_invalid;
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> expression_without_invalid[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "lambdef"));
-        expr_ty lambdef_var;
-        if (
-            (lambdef_var = lambdef_rule(p))  // lambdef
-        )
-        {
-            D(fprintf(stderr, "%*c+ expression_without_invalid[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "lambdef"));
-            _res = lambdef_var;
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s expression_without_invalid[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "lambdef"));
     }
     _res = NULL;
   done:

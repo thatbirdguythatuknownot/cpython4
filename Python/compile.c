@@ -112,7 +112,8 @@ compiler IR.
 
 enum fblocktype { WHILE_LOOP, FOR_LOOP, TRY_EXCEPT, FINALLY_TRY, FINALLY_END,
                   WITH, ASYNC_WITH, HANDLER_CLEANUP, POP_VALUE, EXCEPTION_HANDLER,
-                  EXCEPTION_GROUP_HANDLER, ASYNC_COMPREHENSION_GENERATOR };
+                  EXCEPTION_GROUP_HANDLER, ASYNC_COMPREHENSION_GENERATOR,
+                  EXPR_BLOCK };
 
 struct fblockinfo {
     enum fblocktype fb_type;
@@ -1666,6 +1667,7 @@ compiler_unwind_fblock(struct compiler *c, location *ploc,
         case EXCEPTION_HANDLER:
         case EXCEPTION_GROUP_HANDLER:
         case ASYNC_COMPREHENSION_GENERATOR:
+        case EXPR_BLOCK:
             return SUCCESS;
 
         case FOR_LOOP:
@@ -3289,8 +3291,10 @@ compiler_return(struct compiler *c, stmt_ty s)
     location loc = LOC(s);
     int preserve_tos = ((s->v.Return.value != NULL) &&
                         (s->v.Return.value->kind != Constant_kind));
-    if (!_PyST_IsFunctionLike(c->u->u_ste)) {
-        return compiler_error(c, loc, "'return' outside function");
+    if (!_PyST_IsFunctionLike(c->u->u_ste) &&
+        c->u->u_fblock[c->u->u_nfblocks - 1].fb_type != EXPR_BLOCK)
+    {
+        return compiler_error(c, loc, "'return' outside function or block expression");
     }
     if (s->v.Return.value != NULL &&
         c->u->u_ste->ste_coroutine && c->u->u_ste->ste_generator)
@@ -3318,6 +3322,13 @@ compiler_return(struct compiler *c, stmt_ty s)
     }
     else if (!preserve_tos) {
         ADDOP_LOAD_CONST(c, loc, s->v.Return.value->v.Constant.value);
+    }
+    if (c->u->u_nfblocks > 0) {
+        struct fblockinfo *top = &c->u->u_fblock[c->u->u_nfblocks - 1];
+        if (top->fb_type == EXPR_BLOCK) {
+            ADDOP_JUMP(c, loc, JUMP, top->fb_exit);
+            return SUCCESS;
+        }
     }
     ADDOP(c, loc, RETURN_VALUE);
 
@@ -6044,6 +6055,10 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
         goto error_in_scope;
     }
 
+    if (type == COMP_TUPLECOMP) {
+        ADDOP_I(c, LOC(e), CALL_INTRINSIC_1, INTRINSIC_LIST_TO_TUPLE);
+    }
+
     if (is_inlined) {
         if (pop_inlined_comprehension_state(c, loc, inline_state)) {
             goto error;
@@ -6052,12 +6067,9 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
     }
 
     if (type != COMP_GENEXP) {
-        if (type == COMP_TUPLECOMP) {
-            ADDOP_I(c, LOC(e), CALL_INTRINSIC_1, INTRINSIC_LIST_TO_TUPLE);
-        }
         ADDOP(c, LOC(e), RETURN_VALUE);
     }
-    if (type == COMP_GENEXP) {
+    else {
         if (wrap_in_stopiteration_handler(c) < 0) {
             goto error_in_scope;
         }
@@ -6403,6 +6415,202 @@ compiler_template(struct compiler *c, expr_ty e)
 }
 
 static int
+push_inlined_blockexpr_state(struct compiler *c, location loc,
+                             PySTEntryObject *entry,
+                             inlined_comprehension_state *state)
+{
+    // a block expression technically works like an inlined comprehension,
+    // so treat it like one
+    int in_class_block = (c->u->u_ste->ste_type == ClassBlock) && !c->u->u_in_inlined_comp;
+    c->u->u_in_inlined_comp++;
+    PyObject *k, *v;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(entry->ste_symbols, &pos, &k, &v)) {
+        assert(PyLong_Check(v));
+        long symbol = PyLong_AS_LONG(v);
+        // only values bound in the comprehension (DEF_LOCAL) need to be handled
+        // at all; DEF_LOCAL | DEF_NONLOCAL can occur in the case of an
+        // assignment expression to a nonlocal in the comprehension, these don't
+        // need handling here since they shouldn't be isolated
+        if ((symbol & DEF_LOCAL && !(symbol & DEF_NONLOCAL)) || in_class_block) {
+            if (!_PyST_IsFunctionLike(c->u->u_ste)) {
+                // non-function scope: override this name to use fast locals
+                PyObject *orig = PyDict_GetItem(c->u->u_metadata.u_fasthidden, k);
+                if (orig != Py_True) {
+                    if (PyDict_SetItem(c->u->u_metadata.u_fasthidden, k, Py_True) < 0) {
+                        return ERROR;
+                    }
+                    if (state->fast_hidden == NULL) {
+                        state->fast_hidden = PySet_New(NULL);
+                        if (state->fast_hidden == NULL) {
+                            return ERROR;
+                        }
+                    }
+                    if (PySet_Add(state->fast_hidden, k) < 0) {
+                        return ERROR;
+                    }
+                }
+            }
+            long scope = (symbol >> SCOPE_OFFSET) & SCOPE_MASK;
+            PyObject *outv = PyDict_GetItemWithError(c->u->u_ste->ste_symbols, k);
+            if (outv == NULL) {
+                outv = _PyLong_GetZero();
+            }
+            assert(PyLong_Check(outv));
+            long outsc = (PyLong_AS_LONG(outv) >> SCOPE_OFFSET) & SCOPE_MASK;
+            if (scope != outsc && !(scope == CELL && outsc == FREE)) {
+                // If a name has different scope inside than outside the
+                // comprehension, we need to temporarily handle it with the
+                // right scope while compiling the comprehension. (If it's free
+                // in outer scope and cell in inner scope, we can't treat it as
+                // both cell and free in the same function, but treating it as
+                // free throughout is fine; it's *_DEREF either way.)
+
+                if (state->temp_symbols == NULL) {
+                    state->temp_symbols = PyDict_New();
+                    if (state->temp_symbols == NULL) {
+                        return ERROR;
+                    }
+                }
+                // update the symbol to the in-block version and save
+                // the outer version; we'll restore it after running the
+                // block
+                Py_INCREF(outv);
+                if (PyDict_SetItem(c->u->u_ste->ste_symbols, k, v) < 0) {
+                    Py_DECREF(outv);
+                    return ERROR;
+                }
+                if (PyDict_SetItem(state->temp_symbols, k, outv) < 0) {
+                    Py_DECREF(outv);
+                    return ERROR;
+                }
+                Py_DECREF(outv);
+            }
+            // local names bound in block must be isolated from
+            // outer scope; push existing value (which may be NULL if
+            // not defined) on stack
+            if (state->pushed_locals == NULL) {
+                state->pushed_locals = PyList_New(0);
+                if (state->pushed_locals == NULL) {
+                    return ERROR;
+                }
+            }
+            // in the case of a cell, this will actually push the cell
+            // itself to the stack, then we'll create a new one for the
+            // block and restore the original one after
+            ADDOP_NAME(c, loc, LOAD_FAST_AND_CLEAR, k, varnames);
+            if (scope == CELL) {
+                if (outsc == FREE) {
+                    ADDOP_NAME(c, loc, MAKE_CELL, k, freevars);
+                } else {
+                    ADDOP_NAME(c, loc, MAKE_CELL, k, cellvars);
+                }
+            }
+            if (PyList_Append(state->pushed_locals, k) < 0) {
+                return ERROR;
+            }
+        }
+    }
+
+    return SUCCESS;
+}
+
+static int
+pop_inlined_blockexpr_state(struct compiler *c, location loc,
+                            inlined_comprehension_state state)
+{
+    c->u->u_in_inlined_comp--;
+    PyObject *k, *v;
+    Py_ssize_t pos = 0;
+    if (state.temp_symbols) {
+        while (PyDict_Next(state.temp_symbols, &pos, &k, &v)) {
+            if (PyDict_SetItem(c->u->u_ste->ste_symbols, k, v)) {
+                return ERROR;
+            }
+        }
+        Py_CLEAR(state.temp_symbols);
+    }
+    if (state.pushed_locals) {
+        // pop names we pushed to stack earlier
+        Py_ssize_t npops = PyList_GET_SIZE(state.pushed_locals);
+        // Preserve the result of the block expr as TOS. This gets
+        // the returned value to TOS, so we can still just iterate
+        // pushed_locals in simple reverse order
+        ADDOP_I(c, loc, SWAP, npops + 1);
+        for (Py_ssize_t i = npops - 1; i >= 0; --i) {
+            k = PyList_GetItem(state.pushed_locals, i);
+            if (k == NULL) {
+                return ERROR;
+            }
+            ADDOP_NAME(c, loc, STORE_FAST_MAYBE_NULL, k, varnames);
+        }
+        Py_CLEAR(state.pushed_locals);
+    }
+    if (state.fast_hidden) {
+        while (PySet_Size(state.fast_hidden) > 0) {
+            PyObject *k = PySet_Pop(state.fast_hidden);
+            if (k == NULL) {
+                return ERROR;
+            }
+            // we set to False instead of clearing, so we can track which names
+            // were temporarily fast-locals and should use CO_FAST_HIDDEN
+            if (PyDict_SetItem(c->u->u_metadata.u_fasthidden, k, Py_False)) {
+                Py_DECREF(k);
+                return ERROR;
+            }
+            Py_DECREF(k);
+        }
+        Py_CLEAR(state.fast_hidden);
+    }
+    return SUCCESS;
+}
+
+static int
+compiler_blockexpr(struct compiler *c, expr_ty e)
+{
+    NEW_JUMP_TARGET_LABEL(c, start);
+    NEW_JUMP_TARGET_LABEL(c, end);
+
+    /* Basically copy from compiler_comprehension(), but the block is always inlined */
+    inlined_comprehension_state inline_state = {NULL, NULL};
+    PySTEntryObject *entry = _PySymtable_Lookup(c->c_st, (void *)e);
+    if (entry == NULL) {
+        goto error;
+    }
+
+    location loc = LOC(e);
+
+    if (push_inlined_blockexpr_state(c, loc, entry, &inline_state)) {
+        goto error;
+    }
+    Py_CLEAR(entry);
+
+    RETURN_IF_ERROR(compiler_push_fblock(c, LOC(e), EXPR_BLOCK, start, end, &inline_state));
+
+    VISIT_SEQ(c, stmt, e->v.BlockExpr.body);
+
+    /* add implicit return at the end */
+    ADDOP_LOAD_CONST(c, NO_LOCATION, Py_None);
+    ADDOP_JUMP(c, NO_LOCATION, JUMP, end);
+
+    compiler_pop_fblock(c, EXPR_BLOCK, start);
+
+    USE_LABEL(c, end);
+
+    if (pop_inlined_blockexpr_state(c, loc, inline_state)) {
+        goto error;
+    }
+
+    return SUCCESS;
+error:
+    Py_XDECREF(entry);
+    Py_XDECREF(inline_state.pushed_locals);
+    Py_XDECREF(inline_state.temp_symbols);
+    Py_XDECREF(inline_state.fast_hidden);
+    return ERROR;
+}
+
+static int
 compiler_visit_noneaware(struct compiler *c, expr_ty e, jump_target_label l)
 {
     int made_here = 0;
@@ -6578,6 +6786,8 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
         }
         return SUCCESS;
     }
+    case BlockExpr_kind:
+        return compiler_blockexpr(c, e);
     case Call_kind:
     /* The following exprs can be assignment targets. */
     case Attribute_kind:

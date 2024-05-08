@@ -47,6 +47,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->BitOr_type);
     Py_CLEAR(state->BitXor_singleton);
     Py_CLEAR(state->BitXor_type);
+    Py_CLEAR(state->BlockExpr_type);
     Py_CLEAR(state->BoolOp_type);
     Py_CLEAR(state->Break_type);
     Py_CLEAR(state->Call_type);
@@ -669,6 +670,9 @@ static const char * const Template_fields[]={
 };
 static const char * const CompoundExpr_fields[]={
     "value",
+};
+static const char * const BlockExpr_fields[]={
+    "body",
 };
 static const char * const Attribute_fields[]={
     "value",
@@ -1452,6 +1456,7 @@ init_types(struct ast_state *state)
         "     | Constant(constant value, string? kind)\n"
         "     | Template(int last)\n"
         "     | CompoundExpr(stmt value)\n"
+        "     | BlockExpr(stmt* body)\n"
         "     | Attribute(expr value, identifier attr, expr_context ctx, int aware)\n"
         "     | Subscript(expr value, expr slice, expr_context ctx, int aware)\n"
         "     | Starred(expr value, expr_context ctx)\n"
@@ -1571,6 +1576,10 @@ init_types(struct ast_state *state)
                                          1,
         "CompoundExpr(stmt value)");
     if (!state->CompoundExpr_type) return 0;
+    state->BlockExpr_type = make_type(state, "BlockExpr", state->expr_type,
+                                      BlockExpr_fields, 1,
+        "BlockExpr(stmt* body)");
+    if (!state->BlockExpr_type) return 0;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
                                       Attribute_fields, 4,
         "Attribute(expr value, identifier attr, expr_context ctx, int aware)");
@@ -3450,6 +3459,23 @@ _PyAST_CompoundExpr(stmt_ty value, int lineno, int col_offset, int end_lineno,
 }
 
 expr_ty
+_PyAST_BlockExpr(asdl_stmt_seq * body, int lineno, int col_offset, int
+                 end_lineno, int end_col_offset, PyArena *arena)
+{
+    expr_ty p;
+    p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = BlockExpr_kind;
+    p->v.BlockExpr.body = body;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+expr_ty
 _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
                  aware, int lineno, int col_offset, int end_lineno, int
                  end_col_offset, PyArena *arena)
@@ -5170,6 +5196,17 @@ ast2obj_expr(struct ast_state *state, void* _o)
         value = ast2obj_stmt(state, o->v.CompoundExpr.value);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->value, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
+    case BlockExpr_kind:
+        tp = (PyTypeObject *)state->BlockExpr_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_list(state, (asdl_seq*)o->v.BlockExpr.body,
+                             ast2obj_stmt);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->body, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -10760,6 +10797,57 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         if (*out == NULL) goto failed;
         return 0;
     }
+    tp = state->BlockExpr_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        asdl_stmt_seq* body;
+
+        if (PyObject_GetOptionalAttr(obj, state->body, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            tmp = PyList_New(0);
+            if (tmp == NULL) {
+                return 1;
+            }
+        }
+        {
+            int res;
+            Py_ssize_t len;
+            Py_ssize_t i;
+            if (!PyList_Check(tmp)) {
+                PyErr_Format(PyExc_TypeError, "BlockExpr field \"body\" must be a list, not a %.200s", _PyType_Name(Py_TYPE(tmp)));
+                goto failed;
+            }
+            len = PyList_GET_SIZE(tmp);
+            body = _Py_asdl_stmt_seq_new(len, arena);
+            if (body == NULL) goto failed;
+            for (i = 0; i < len; i++) {
+                stmt_ty val;
+                PyObject *tmp2 = Py_NewRef(PyList_GET_ITEM(tmp, i));
+                if (_Py_EnterRecursiveCall(" while traversing 'BlockExpr' node")) {
+                    goto failed;
+                }
+                res = obj2ast_stmt(state, tmp2, &val, arena);
+                _Py_LeaveRecursiveCall();
+                Py_DECREF(tmp2);
+                if (res != 0) goto failed;
+                if (len != PyList_GET_SIZE(tmp)) {
+                    PyErr_SetString(PyExc_RuntimeError, "BlockExpr field \"body\" changed size during iteration");
+                    goto failed;
+                }
+                asdl_seq_SET(body, i, val);
+            }
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_BlockExpr(body, lineno, col_offset, end_lineno,
+                                end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
     tp = state->Attribute_type;
     isinstance = PyObject_IsInstance(obj, tp);
     if (isinstance == -1) {
@@ -13802,6 +13890,9 @@ astmodule_exec(PyObject *m)
     }
     if (PyModule_AddObjectRef(m, "CompoundExpr", state->CompoundExpr_type) < 0)
         {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "BlockExpr", state->BlockExpr_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Attribute", state->Attribute_type) < 0) {

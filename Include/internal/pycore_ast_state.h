@@ -35,6 +35,7 @@ struct ast_state {
     PyObject *BitOr_type;
     PyObject *BitXor_singleton;
     PyObject *BitXor_type;
+    PyObject *BlockExpr_type;
     PyObject *BoolOp_type;
     PyObject *Break_type;
     PyObject *Call_type;

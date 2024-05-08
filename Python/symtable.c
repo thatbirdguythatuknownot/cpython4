@@ -2151,6 +2151,21 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
     case CompoundExpr_kind:
         VISIT(st, stmt, e->v.CompoundExpr.value);
         break;
+    case BlockExpr_kind: {
+        if (!symtable_enter_block(st, &_Py_ID(block),
+                                  FunctionBlock, (void *)e,
+                                  LOCATION(e)))
+        {
+            VISIT_QUIT(st, 0);
+        }
+
+        VISIT_SEQ(st, stmt, e->v.BlockExpr.body);
+
+        if (!symtable_exit_block(st)) {
+            VISIT_QUIT(st, 0);
+        }
+        break;
+    }
     }
     VISIT_QUIT(st, 1);
 }

@@ -24,6 +24,7 @@ kwlist = [
     'assert',
     'async',
     'await',
+    'block',
     'break',
     'class',
     'continue',

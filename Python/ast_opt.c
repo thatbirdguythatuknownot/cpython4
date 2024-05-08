@@ -1207,6 +1207,9 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case CompoundExpr_kind:
         CALL(astfold_stmt, stmt_ty, node_->v.CompoundExpr.value);
         break;
+    case BlockExpr_kind:
+        CALL_SEQ(astfold_stmt, stmt, node_->v.BlockExpr.body);
+        break;
     case Constant_kind:
     case Template_kind:
         // nothing further to do

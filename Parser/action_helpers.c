@@ -973,10 +973,16 @@ _PyPegen_check_barry_import(Parser *p, stmt_ty s) {
         int i;
         for (i = 0; i < asdl_seq_LEN(s->v.ImportFrom.names); i++) {
             alias_ty name = (alias_ty)asdl_seq_GET(s->v.ImportFrom.names, i);
-            if (PyUnicode_CompareWithASCIIString(name->name,
-                                                 FUTURE_BARRY_AS_BDFL) == 0)
-            {
+            const char *feature = PyUnicode_AsUTF8(name->name);
+            if (!feature) {
+                continue;
+            }
+            if (strcmp(feature, FUTURE_BARRY_AS_BDFL) == 0) {
                 p->flags |= PyPARSE_BARRY_AS_BDFL;
+                break;
+            }
+            else if (strcmp(feature, "braces") == 0) {
+                p->flags |= PyPARSE_BRACES;
                 break;
             }
         }

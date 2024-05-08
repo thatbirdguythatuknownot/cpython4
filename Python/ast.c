@@ -393,6 +393,9 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
     case CompoundExpr_kind:
         ret = validate_stmt(state, exp->v.CompoundExpr.value);
         break;
+    case BlockExpr_kind:
+        ret = validate_stmts(state, exp->v.BlockExpr.body);
+        break;
     /* This last case doesn't have any checking. */
     case Template_kind:
     case Name_kind:

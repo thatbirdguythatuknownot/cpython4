@@ -142,7 +142,7 @@ compound_stmt[stmt_ty]:
     | &'while' while_stmt
     | &"switch" switch_stmt
     | match_stmt
-    | &'block' a=block_expr { _PyAST_Expr(a, EXTRA) }
+    | &"block" a=block_expr { _PyAST_Expr(a, EXTRA) }
     | assignment_block
 
 statements_nonewline[asdl_stmt_seq*]: a=statement_nonewline+ { (asdl_stmt_seq*)_PyPegen_seq_flatten(p, a) }
@@ -165,7 +165,7 @@ compound_stmt_nonewline[stmt_ty]:
     | &'while' while_stmt_nonewline
     | &"switch" switch_stmt_nonewline
     | match_stmt_nonewline
-    | &'block' a=block_expr_nonewline { _PyAST_Expr(a, EXTRA) }
+    | &"block" a=block_expr_nonewline { _PyAST_Expr(a, EXTRA) }
     | assignment_block_nonewline
 
 # SIMPLE STATEMENTS
@@ -304,7 +304,6 @@ assignment_block[stmt_ty]:
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
-    | invalid_assignment
 
 assignment_block_nonewline[stmt_ty]:
     | a=NAME ':' b=expression c=['=' d=block_expr_nonewline { d }] {
@@ -323,7 +322,6 @@ assignment_block_nonewline[stmt_ty]:
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr_nonewline {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
-    | invalid_assignment
 
 # Common elements
 # ---------------
@@ -1024,7 +1022,7 @@ expression[expr_ty] (memo):
     | invalid_expression
     | invalid_legacy_expression
     | lambdef
-    | 'block' b=braced_block { _PyAST_BlockExpr(b, EXTRA) }
+    | "block" b=braced_block { _PyAST_BlockExpr(b, EXTRA) }
     | a=disjunction 'if' b=disjunction 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
     | disjunction
 
@@ -1033,10 +1031,10 @@ yield_expr[expr_ty]:
     | 'yield' a=[star_expressions] { _PyAST_Yield(a, EXTRA) }
 
 block_expr[expr_ty]:
-    | 'block' b=block_entry { _PyAST_BlockExpr(b, EXTRA) }
+    | "block" b=block_entry { _PyAST_BlockExpr(b, EXTRA) }
 
 block_expr_nonewline[expr_ty]:
-    | 'block' b=block_entry_nonewline { _PyAST_BlockExpr(b, EXTRA) }
+    | "block" b=block_entry_nonewline { _PyAST_BlockExpr(b, EXTRA) }
 
 star_expressions[expr_ty]:
     | a=star_expression b=(',' c=star_expression { c })+ [','] {
@@ -1248,7 +1246,7 @@ group[expr_ty]:
 compound_expr[expr_ty]:
     | '(' a=( &("def" | '@' | 'async') function_def_nonewline
             | &('class' | '@') class_def_nonewline
-            | &'block' block_expr_nonewline) ')' { _PyAST_CompoundExpr(a, EXTRA) }
+            | &"block" block_expr_nonewline) ')' { _PyAST_CompoundExpr(a, EXTRA) }
 
 # Lambda functions
 # ----------------

@@ -24,7 +24,6 @@ kwlist = [
     'assert',
     'async',
     'await',
-    'block',
     'break',
     'class',
     'continue',
@@ -57,6 +56,7 @@ kwlist = [
 
 softkwlist = [
     '_',
+    'block',
     'case',
     'def',
     'label',

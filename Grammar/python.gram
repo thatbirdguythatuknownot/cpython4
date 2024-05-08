@@ -1427,24 +1427,41 @@ for_if_clause[comprehension_ty]:
         _PyAST_comprehension(a, _PyAST_List(CHECK(asdl_expr_seq*, _PyPegen_singleton_seq(p, b)), Load, EXTRA), c, 0, p->arena) }
     | invalid_for_target
 
+for_if_prefix_clauses[asdl_comprehension_seq*]:
+    | a[asdl_comprehension_seq*]=for_if_prefix_clause+ { a }
+
+for_if_prefix_clause[comprehension_ty]:
+    | 'async' 'for' a=star_targets 'in' ~ b=star_expressions ':' c[asdl_expr_seq*]=('if' z=named_expression ':' { z })* {
+        CHECK_VERSION(comprehension_ty, 6, "Async comprehensions are", _PyAST_comprehension(a, b, c, 1, p->arena)) }
+    | 'for' a=star_targets 'in' ~ b=star_expressions ':' c[asdl_expr_seq*]=('if' z=named_expression ':' { z })* {
+        _PyAST_comprehension(a, b, c, 0, p->arena) }
+    | "where" a=star_targets '=' b=star_expressions ':' c[asdl_expr_seq*]=('if' z=named_expression ':' { z })* {
+        _PyAST_comprehension(a, _PyAST_List(CHECK(asdl_expr_seq*, _PyPegen_singleton_seq(p, b)), Load, EXTRA), c, 0, p->arena) }
+    | invalid_for_target
+
 listcomp[expr_ty]:
     | '[' a=named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
+    | '[' b=for_if_prefix_clauses a=named_expression ']' { _PyAST_ListComp(a, b, EXTRA) }
     | invalid_comprehension
 
 tuplecomp[expr_ty]:
     | '(' a=( assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
+    | '(' b=for_if_prefix_clauses a=( assignment_expression | expression !':=') ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
 setcomp[expr_ty]:
     | '{' a=named_expression b=for_if_clauses '}' { _PyAST_SetComp(a, b, EXTRA) }
+    | '{' b=for_if_prefix_clauses a=named_expression '}' { _PyAST_SetComp(a, b, EXTRA) }
     | invalid_comprehension
 
 genexp[expr_ty]:
     | '(' a=( assignment_expression | expression !':=') b=for_if_clauses ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
+    | '(' b=for_if_prefix_clauses a=( assignment_expression | expression !':=') ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
     | invalid_comprehension
 
 dictcomp[expr_ty]:
     | '{' a=kvpair b=for_if_clauses '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
+    | '{' b=for_if_prefix_clauses a=kvpair '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | invalid_dict_comprehension
 
 # FUNCTION CALL ARGUMENTS

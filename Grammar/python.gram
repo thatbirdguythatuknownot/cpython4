@@ -344,7 +344,9 @@ block[asdl_stmt_seq*] (memo):
 
 block_nonewline[asdl_stmt_seq*]: statements_nonewline
 
-decorators[asdl_expr_seq*]: a[asdl_expr_seq*]=('@' f=named_expression NEWLINE { f })+ { a }
+decorators[asdl_expr_seq*]: a[asdl_expr_seq*]=('@' f=named_expression (';' &('@' | NEWLINE) | NEWLINE) { f })+ { a }
+
+decorators_nonewline[asdl_expr_seq*]: a[asdl_expr_seq*]=('@' f=named_expression ';'? { f })+ { a }
 
 # Class definitions
 # -----------------
@@ -362,7 +364,7 @@ class_def_raw[stmt_ty]:
                      c, NULL, t, EXTRA) }
 
 class_def_nonewline[stmt_ty]:
-    | a=decorators b=class_def_raw_nonewline { _PyPegen_class_def_decorators(p, a, b) }
+    | a=decorators_nonewline b=class_def_raw_nonewline { _PyPegen_class_def_decorators(p, a, b) }
     | class_def_raw_nonewline
 
 class_def_raw_nonewline[stmt_ty]:
@@ -413,7 +415,7 @@ function_def_raw[stmt_ty]:
         ) }
 
 function_def_nonewline[stmt_ty]:
-    | d=decorators f=function_def_raw_nonewline { _PyPegen_function_def_decorators(p, d, f) }
+    | d=decorators_nonewline f=function_def_raw_nonewline { _PyPegen_function_def_decorators(p, d, f) }
     | function_def_raw_nonewline
 
 function_def_raw_nonewline[stmt_ty]:

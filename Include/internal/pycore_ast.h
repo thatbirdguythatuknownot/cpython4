@@ -388,9 +388,9 @@ enum _expr_kind {BoolOp_kind=1, NamedExpr_kind=2, BinOp_kind=3, UnaryOp_kind=4,
                   Await_kind=15, Yield_kind=16, YieldFrom_kind=17,
                   Compare_kind=18, Call_kind=19, FormattedValue_kind=20,
                   JoinedStr_kind=21, Constant_kind=22, Template_kind=23,
-                  CompoundExpr_kind=24, BlockExpr_kind=25, Attribute_kind=26,
-                  Subscript_kind=27, Starred_kind=28, Name_kind=29,
-                  List_kind=30, Tuple_kind=31, Slice_kind=32};
+                  CompoundExpr_kind=24, BlockExpr_kind=25, ExprTarget_kind=26,
+                  Attribute_kind=27, Subscript_kind=28, Starred_kind=29,
+                  Name_kind=30, List_kind=31, Tuple_kind=32, Slice_kind=33};
 struct _expr {
     enum _expr_kind kind;
     union {
@@ -517,6 +517,10 @@ struct _expr {
         struct {
             asdl_stmt_seq *body;
         } BlockExpr;
+
+        struct {
+            expr_ty value;
+        } ExprTarget;
 
         struct {
             expr_ty value;
@@ -898,6 +902,8 @@ expr_ty _PyAST_CompoundExpr(stmt_ty value, int lineno, int col_offset, int
                             end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_BlockExpr(asdl_stmt_seq * body, int lineno, int col_offset, int
                          end_lineno, int end_col_offset, PyArena *arena);
+expr_ty _PyAST_ExprTarget(expr_ty value, int lineno, int col_offset, int
+                          end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_Attribute(expr_ty value, identifier attr, expr_context_ty ctx,
                          int aware, int lineno, int col_offset, int end_lineno,
                          int end_col_offset, PyArena *arena);

@@ -1117,7 +1117,7 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.SetComp.generators);
         break;
     case DictComp_kind:
-        CALL(astfold_expr, expr_ty, node_->v.DictComp.key);
+        CALL_OPT(astfold_expr, expr_ty, node_->v.DictComp.key);
         CALL(astfold_expr, expr_ty, node_->v.DictComp.value);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.DictComp.generators);
         break;
@@ -1210,6 +1210,8 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
     case BlockExpr_kind:
         CALL_SEQ(astfold_stmt, stmt, node_->v.BlockExpr.body);
         break;
+    case ExprTarget_kind:
+        CALL(astfold_expr, expr_ty, node_->v.ExprTarget.value);
     case Constant_kind:
     case Template_kind:
         // nothing further to do

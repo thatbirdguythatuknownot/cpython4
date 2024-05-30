@@ -2166,6 +2166,9 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         }
         break;
     }
+    case ExprTarget_kind:
+        VISIT(st, expr, e->v.ExprTarget.value);
+        break;
     }
     VISIT_QUIT(st, 1);
 }
@@ -2545,9 +2548,11 @@ symtable_handle_comprehension(struct symtable *st, expr_ty e,
     /* Visit the rest of the comprehension body */
     VISIT_SEQ(st, expr, outermost->ifs);
     VISIT_SEQ_TAIL(st, comprehension, generators, 1);
+    assert(elt || value && e->kind == DictComp_kind);
     if (value)
         VISIT(st, expr, value);
-    VISIT(st, expr, elt);
+    if (elt)
+        VISIT(st, expr, elt);
     st->st_cur->ste_generator = is_generator;
     int is_async = st->st_cur->ste_coroutine && !is_generator;
     if (!symtable_exit_block(st)) {

@@ -61,6 +61,7 @@ struct ast_state {
     PyObject *Eq_singleton;
     PyObject *Eq_type;
     PyObject *ExceptHandler_type;
+    PyObject *ExprTarget_type;
     PyObject *Expr_type;
     PyObject *Expression_type;
     PyObject *FloorDiv_singleton;

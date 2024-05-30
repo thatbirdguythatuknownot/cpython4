@@ -187,13 +187,21 @@ assignment[stmt_ty]:
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[top_rhs] { (--p->subn, d) }) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
+    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[top_rhs] { (--p->subn, d) }) {
+         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=unarassign &(';' | NEWLINE) {
          _PyAST_AugAssign(a, b->kind, NULL, EXTRA) }
+    | a=aug_target b=unarassign &(';' | NEWLINE) {
+         _PyAST_AugAssign(a, b->kind, NULL, EXTRA) }
     | a=single_target b=augassign ~ c=top_rhs {
+         _PyAST_AugAssign(a, b->kind, c, EXTRA) }
+    | a=aug_target b=augassign ~ c=top_rhs {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
     | invalid_assignment
 
 top_rhs[expr_ty]: yield_expr | star_expressions
+
+aug_target[expr_ty]: a=expression { _PyAST_ExprTarget(a, EXTRA) }
 
 augassign[AugOperator*]:
     | '+=' { _PyPegen_augoperator(p, Add) }
@@ -302,7 +310,11 @@ assignment_block[stmt_ty]:
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr] { (--p->subn, d) }) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
+    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr] { (--p->subn, d) }) {
+         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr {
+         _PyAST_AugAssign(a, b->kind, c, EXTRA) }
+    | a=aug_target b=augassign c=block_expr {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
 
 assignment_block_nonewline[stmt_ty]:
@@ -320,7 +332,11 @@ assignment_block_nonewline[stmt_ty]:
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr_nonewline] { (--p->subn, d) }) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
+    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr_nonewline] { (--p->subn, d) }) {
+         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr_nonewline {
+         _PyAST_AugAssign(a, b->kind, c, EXTRA) }
+    | a=aug_target b=augassign c=block_expr_nonewline {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
 
 # Common elements
@@ -1054,20 +1070,26 @@ star_sum[expr_ty] (memo):
     | '*' a=sum { _PyAST_Starred(a, Load, EXTRA) }
     | sum
 
+star_assignment_expression[expr_ty]:
+    | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
+    | simple_slice
+    | assignment_expression
+
 star_named_expressions[asdl_expr_seq*]: a[asdl_expr_seq*]=','.star_named_expression+ [','] { a }
+
+star_named_noslice_expressions[asdl_expr_seq*]: a[asdl_expr_seq*]=','.star_named_noslice_expression+ [','] { a }
 
 star_named_expression[expr_ty]:
     | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
     | simple_slice
     | named_expression
 
-star_assignment_expression[expr_ty]:
+star_named_noslice_expression[expr_ty]:
     | '*' a=bitwise_or { _PyAST_Starred(a, Load, EXTRA) }
-    | simple_slice
-    | assignment_expression
+    | named_expression
 
 assignment_expression[expr_ty]:
-    | a=star_target ':=' ~ b=expression {
+    | a=target_with_star_atom ':=' ~ b=expression {
         CHECK_VERSION(expr_ty, 8, "Assignment expressions are",
         _PyAST_NamedExpr(a, b, EXTRA)) }
 
@@ -1393,7 +1415,7 @@ tuple[expr_ty]:
     | '(' a=[y=star_named_expression ',' z=[star_named_expressions] { _PyPegen_seq_insert_in_front(p, y, z) } ] ')' {
         _PyAST_Tuple(a, Load, EXTRA) }
 
-set[expr_ty]: '{' a=star_named_expressions '}' { _PyAST_Set(a, EXTRA) }
+set[expr_ty]: '{' a=star_named_noslice_expressions '}' { _PyAST_Set(a, EXTRA) }
 
 # Dicts
 # -----
@@ -1452,28 +1474,28 @@ if_prefix_clause[expr_ty]:
     | 'if' z=named_expression &'->' { z }
 
 listcomp[expr_ty]:
-    | '[' a=named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
-    | '[' b=for_if_prefix_clauses a=named_expression ']' { _PyAST_ListComp(a, b, EXTRA) }
+    | '[' a=star_named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
+    | '[' b=for_if_prefix_clauses a=star_named_expression ']' { _PyAST_ListComp(a, b, EXTRA) }
     | invalid_comprehension
 
 tuplecomp[expr_ty]:
-    | '(' a=( assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
-    | '(' b=for_if_prefix_clauses a=( assignment_expression | expression !':=') ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
+    | '(' a=( star_assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
+    | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
 setcomp[expr_ty]:
-    | '{' a=named_expression b=for_if_clauses '}' { _PyAST_SetComp(a, b, EXTRA) }
-    | '{' b=for_if_prefix_clauses a=named_expression '}' { _PyAST_SetComp(a, b, EXTRA) }
+    | '{' a=star_named_noslice_expression b=for_if_clauses '}' { _PyAST_SetComp(a, b, EXTRA) }
+    | '{' b=for_if_prefix_clauses a=star_named_noslice_expression '}' { _PyAST_SetComp(a, b, EXTRA) }
     | invalid_comprehension
 
 genexp[expr_ty]:
-    | '(' a=( assignment_expression | expression !':=') b=for_if_clauses ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
-    | '(' b=for_if_prefix_clauses a=( assignment_expression | expression !':=') ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
+    | '(' a=( star_assignment_expression | expression !':=') b=for_if_clauses ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
+    | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
     | invalid_comprehension
 
 dictcomp[expr_ty]:
-    | '{' a=kvpair b=for_if_clauses '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
-    | '{' b=for_if_prefix_clauses a=kvpair '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
+    | '{' a=double_starred_kvpair b=for_if_clauses '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
+    | '{' b=for_if_prefix_clauses a=double_starred_kvpair '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | invalid_dict_comprehension
 
 # FUNCTION CALL ARGUMENTS

@@ -246,6 +246,9 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
     case Tuple_kind:
         actual_ctx = exp->v.Tuple.ctx;
         break;
+    case ExprTarget_kind:
+        actual_ctx = Store;
+        break;
     default:
         if (ctx != Load) {
             PyErr_Format(PyExc_ValueError, "expression which can't be "
@@ -313,7 +316,7 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
 #undef COMP
     case DictComp_kind:
         ret = validate_comprehension(state, exp->v.DictComp.generators) &&
-            validate_expr(state, exp->v.DictComp.key, Load) &&
+            (!exp->v.DictComp.key || validate_expr(state, exp->v.DictComp.key, Load)) &&
             validate_expr(state, exp->v.DictComp.value, Load);
         break;
     case Yield_kind:
@@ -395,6 +398,9 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
         break;
     case BlockExpr_kind:
         ret = validate_stmts(state, exp->v.BlockExpr.body);
+        break;
+    case ExprTarget_kind:
+        ret = validate_expr(state, exp->v.ExprTarget.value, Load);
         break;
     /* This last case doesn't have any checking. */
     case Template_kind:

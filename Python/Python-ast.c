@@ -73,6 +73,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Eq_singleton);
     Py_CLEAR(state->Eq_type);
     Py_CLEAR(state->ExceptHandler_type);
+    Py_CLEAR(state->ExprTarget_type);
     Py_CLEAR(state->Expr_type);
     Py_CLEAR(state->Expression_type);
     Py_CLEAR(state->FloorDiv_singleton);
@@ -673,6 +674,9 @@ static const char * const CompoundExpr_fields[]={
 };
 static const char * const BlockExpr_fields[]={
     "body",
+};
+static const char * const ExprTarget_fields[]={
+    "value",
 };
 static const char * const Attribute_fields[]={
     "value",
@@ -1444,7 +1448,7 @@ init_types(struct ast_state *state)
         "     | ListComp(expr elt, comprehension* generators)\n"
         "     | TupleComp(expr elt, comprehension* generators)\n"
         "     | SetComp(expr elt, comprehension* generators)\n"
-        "     | DictComp(expr key, expr value, comprehension* generators)\n"
+        "     | DictComp(expr? key, expr value, comprehension* generators)\n"
         "     | GeneratorExp(expr elt, comprehension* generators)\n"
         "     | Await(expr value)\n"
         "     | Yield(expr? value)\n"
@@ -1457,6 +1461,7 @@ init_types(struct ast_state *state)
         "     | Template(int last)\n"
         "     | CompoundExpr(stmt value)\n"
         "     | BlockExpr(stmt* body)\n"
+        "     | ExprTarget(expr value)\n"
         "     | Attribute(expr value, identifier attr, expr_context ctx, int aware)\n"
         "     | Subscript(expr value, expr slice, expr_context ctx, int aware)\n"
         "     | Starred(expr value, expr_context ctx)\n"
@@ -1520,8 +1525,10 @@ init_types(struct ast_state *state)
     if (!state->SetComp_type) return 0;
     state->DictComp_type = make_type(state, "DictComp", state->expr_type,
                                      DictComp_fields, 3,
-        "DictComp(expr key, expr value, comprehension* generators)");
+        "DictComp(expr? key, expr value, comprehension* generators)");
     if (!state->DictComp_type) return 0;
+    if (PyObject_SetAttr(state->DictComp_type, state->key, Py_None) == -1)
+        return 0;
     state->GeneratorExp_type = make_type(state, "GeneratorExp",
                                          state->expr_type, GeneratorExp_fields,
                                          2,
@@ -1580,6 +1587,10 @@ init_types(struct ast_state *state)
                                       BlockExpr_fields, 1,
         "BlockExpr(stmt* body)");
     if (!state->BlockExpr_type) return 0;
+    state->ExprTarget_type = make_type(state, "ExprTarget", state->expr_type,
+                                       ExprTarget_fields, 1,
+        "ExprTarget(expr value)");
+    if (!state->ExprTarget_type) return 0;
     state->Attribute_type = make_type(state, "Attribute", state->expr_type,
                                       Attribute_fields, 4,
         "Attribute(expr value, identifier attr, expr_context ctx, int aware)");
@@ -3194,11 +3205,6 @@ _PyAST_DictComp(expr_ty key, expr_ty value, asdl_comprehension_seq *
                 end_col_offset, PyArena *arena)
 {
     expr_ty p;
-    if (!key) {
-        PyErr_SetString(PyExc_ValueError,
-                        "field 'key' is required for DictComp");
-        return NULL;
-    }
     if (!value) {
         PyErr_SetString(PyExc_ValueError,
                         "field 'value' is required for DictComp");
@@ -3468,6 +3474,28 @@ _PyAST_BlockExpr(asdl_stmt_seq * body, int lineno, int col_offset, int
         return NULL;
     p->kind = BlockExpr_kind;
     p->v.BlockExpr.body = body;
+    p->lineno = lineno;
+    p->col_offset = col_offset;
+    p->end_lineno = end_lineno;
+    p->end_col_offset = end_col_offset;
+    return p;
+}
+
+expr_ty
+_PyAST_ExprTarget(expr_ty value, int lineno, int col_offset, int end_lineno,
+                  int end_col_offset, PyArena *arena)
+{
+    expr_ty p;
+    if (!value) {
+        PyErr_SetString(PyExc_ValueError,
+                        "field 'value' is required for ExprTarget");
+        return NULL;
+    }
+    p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
+    if (!p)
+        return NULL;
+    p->kind = ExprTarget_kind;
+    p->v.ExprTarget.value = value;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -5207,6 +5235,16 @@ ast2obj_expr(struct ast_state *state, void* _o)
                              ast2obj_stmt);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->body, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        break;
+    case ExprTarget_kind:
+        tp = (PyTypeObject *)state->ExprTarget_type;
+        result = PyType_GenericNew(tp, NULL, NULL);
+        if (!result) goto failed;
+        value = ast2obj_expr(state, o->v.ExprTarget.value);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->value, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -10104,9 +10142,9 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         if (PyObject_GetOptionalAttr(obj, state->key, &tmp) < 0) {
             return 1;
         }
-        if (tmp == NULL) {
-            PyErr_SetString(PyExc_TypeError, "required field \"key\" missing from DictComp");
-            return 1;
+        if (tmp == NULL || tmp == Py_None) {
+            Py_CLEAR(tmp);
+            key = NULL;
         }
         else {
             int res;
@@ -10845,6 +10883,36 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         }
         *out = _PyAST_BlockExpr(body, lineno, col_offset, end_lineno,
                                 end_col_offset, arena);
+        if (*out == NULL) goto failed;
+        return 0;
+    }
+    tp = state->ExprTarget_type;
+    isinstance = PyObject_IsInstance(obj, tp);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        expr_ty value;
+
+        if (PyObject_GetOptionalAttr(obj, state->value, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"value\" missing from ExprTarget");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'ExprTarget' node")) {
+                goto failed;
+            }
+            res = obj2ast_expr(state, tmp, &value, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_ExprTarget(value, lineno, col_offset, end_lineno,
+                                 end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }
@@ -13893,6 +13961,9 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "BlockExpr", state->BlockExpr_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "ExprTarget", state->ExprTarget_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Attribute", state->Attribute_type) < 0) {

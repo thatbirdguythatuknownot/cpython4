@@ -190,6 +190,7 @@ const uint8_t _PyOpcode_Deopt[256] = {
     [MATCH_MAPPING] = MATCH_MAPPING,
     [MATCH_SEQUENCE] = MATCH_SEQUENCE,
     [NOP] = NOP,
+    [PIPEARG_MARKER] = PIPEARG_MARKER,
     [POP_EXCEPT] = POP_EXCEPT,
     [POP_JUMP_IF_FALSE] = POP_JUMP_IF_FALSE,
     [POP_JUMP_IF_NONE] = POP_JUMP_IF_NONE,
@@ -252,10 +253,10 @@ const uint8_t _PyOpcode_Deopt[256] = {
 #endif   // NEED_OPCODE_TABLES
 
 
-extern const char *const _PyOpcode_OpName[270];
+extern const char *const _PyOpcode_OpName[269];
 
 #ifdef NEED_OPCODE_TABLES
-const char *const _PyOpcode_OpName[270] = {
+const char *const _PyOpcode_OpName[269] = {
     [CACHE] = "CACHE",
     [POP_TOP] = "POP_TOP",
     [PUSH_NULL] = "PUSH_NULL",
@@ -489,7 +490,7 @@ const char *const _PyOpcode_OpName[270] = {
     [ENTER_EXECUTOR] = "ENTER_EXECUTOR",
     [231] = "<231>",
     [232] = "<232>",
-    [233] = "<233>",
+    [PIPEARG_MARKER] = "PIPEARG_MARKER",
     [234] = "<234>",
     [235] = "<235>",
     [236] = "<236>",
@@ -524,8 +525,7 @@ const char *const _PyOpcode_OpName[270] = {
     [LOAD_ZERO_SUPER_ATTR] = "LOAD_ZERO_SUPER_ATTR",
     [STORE_FAST_MAYBE_NULL] = "STORE_FAST_MAYBE_NULL",
     [LOAD_CLOSURE] = "LOAD_CLOSURE",
-    [PIPEARG_MARKER] = "PIPEARG_MARKER",
-    [PIPEARG_ENDMARKER] = "PIPEARG_ENDMARKER",
+    [LOAD_TEMPLATE] = "LOAD_TEMPLATE",
 };
 #endif   // NEED_OPCODE_TABLES
 
@@ -569,7 +569,6 @@ const char *const _PyOpcode_OpName[270] = {
     case 229: \
     case 231: \
     case 232: \
-    case 233: \
     case 234: \
     case 235: \
     case 236: \

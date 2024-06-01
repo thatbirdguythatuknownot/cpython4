@@ -185,6 +185,8 @@ def_op('POP_POP4JUMP_IF_NONE', 183)
 # Optimizer hook
 def_op('ENTER_EXECUTOR', 230)
 
+def_op('PIPEARG_MARKER', 233)
+
 # Instrumented instructions
 MIN_INSTRUMENTED_OPCODE = 237
 
@@ -227,8 +229,7 @@ def_op('LOAD_ZERO_SUPER_ATTR', 265)
 def_op('STORE_FAST_MAYBE_NULL', 266)
 def_op('LOAD_CLOSURE', 267)
 
-def_op('PIPEARG_MARKER', 268)
-def_op('PIPEARG_ENDMARKER', 269)
+def_op('LOAD_TEMPLATE', 268)
 
 del def_op
 

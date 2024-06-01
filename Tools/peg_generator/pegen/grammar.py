@@ -60,11 +60,11 @@ SIMPLE_STR = True
 
 
 class Rule:
-    def __init__(self, name: str, type: Optional[str], rhs: Rhs, memo: Optional[object] = None):
+    def __init__(self, name: str, type: Optional[str], rhs: Rhs, flags: list[str] = None):
         self.name = name
         self.type = type
         self.rhs = rhs
-        self.memo = bool(memo)
+        self.flags = flags if flags is not None else []
         self.left_recursive = False
         self.leader = False
 
@@ -179,6 +179,20 @@ class Alt:
         if self.action:
             args.append(f"action={self.action!r}")
         return f"Alt({', '.join(args)})"
+
+    def __iter__(self) -> Iterator[List[NamedItem]]:
+        yield self.items
+
+
+class TemplateGroup:
+    def __init__(self, items: List[NamedItem]):
+        self.items = items
+
+    def __str__(self) -> str:
+        return " ".join(map(str, self.items))
+
+    def __repr__(self) -> str:
+        return f"TemplateGroup({self.items!r})"
 
     def __iter__(self) -> Iterator[List[NamedItem]]:
         yield self.items
@@ -346,12 +360,11 @@ class Cut:
     def initial_names(self) -> AbstractSet[str]:
         return set()
 
-
 Plain = Union[Leaf, Group]
 Item = Union[Plain, Opt, Repeat, Forced, Lookahead, Rhs, Cut]
 RuleName = Tuple[str, str]
 MetaTuple = Tuple[str, Optional[str]]
 MetaList = List[MetaTuple]
 RuleList = List[Rule]
-NamedItemList = List[NamedItem]
+Items = List[Union[NamedItem, TemplateGroup]]
 LookaheadOrCut = Union[Lookahead, Cut]

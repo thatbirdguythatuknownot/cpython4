@@ -238,6 +238,17 @@ class Parser:
                 return self._tokenizer.getnext()
         if tok.type == token.OP and tok.string == type:
             return self._tokenizer.getnext()
+        if type == "$0":
+            mark = self._tokenizer.mark()
+            tok = self.expect("$")
+            tok2 = self.expect("(")
+            if tok and tok2:
+                return tokenize.TokenInfo(tokenize.OP, type,
+                                          tok.start, tok2.end,
+                                          tok.line + (tok2.line if tok2.start[0] != tok.end[0] else ""))
+            self._tokenizer.reset(mark)
+        if type == "$1":
+            return self.expect(")")
         if (type == "++" or type == "--") and tok.string == type[0]:
             mark = self._tokenizer.mark()
             tok = self._tokenizer.getnext()

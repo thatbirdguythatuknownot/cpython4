@@ -12,6 +12,7 @@ from ast import literal_eval
 
 from pegen.grammar import (
     Alt,
+    TemplateGroup,
     Cut,
     Forced,
     Gather,
@@ -23,7 +24,7 @@ from pegen.grammar import (
     MetaList,
     NameLeaf,
     NamedItem,
-    NamedItemList,
+    Items,
     NegativeLookahead,
     Opt,
     Plain,
@@ -147,12 +148,12 @@ class GeneratedParser(Parser):
 
     @memoize
     def rule(self) -> Optional[Rule]:
-        # rule: rulename memoflag? ":" alts NEWLINE INDENT more_alts DEDENT | rulename memoflag? ":" NEWLINE INDENT more_alts DEDENT | rulename memoflag? ":" alts NEWLINE
+        # rule: rulename flags? ":" alts NEWLINE INDENT more_alts DEDENT | rulename flags? ":" NEWLINE INDENT more_alts DEDENT | rulename flags? ":" alts NEWLINE
         mark = self._mark()
         if (
             (rulename := self.rulename())
             and
-            (opt := self.memoflag(),)
+            (opt := self.flags(),)
             and
             (literal := self.expect(":"))
             and
@@ -166,12 +167,12 @@ class GeneratedParser(Parser):
             and
             (_dedent := self.expect('DEDENT'))
         ):
-            return Rule ( rulename [0] , rulename [1] , Rhs ( alts . alts + more_alts . alts ) , memo = opt )
+            return Rule ( rulename [0] , rulename [1] , Rhs ( alts . alts + more_alts . alts ) , flags = opt or [] )
         self._reset(mark)
         if (
             (rulename := self.rulename())
             and
-            (opt := self.memoflag(),)
+            (opt := self.flags(),)
             and
             (literal := self.expect(":"))
             and
@@ -183,12 +184,12 @@ class GeneratedParser(Parser):
             and
             (_dedent := self.expect('DEDENT'))
         ):
-            return Rule ( rulename [0] , rulename [1] , more_alts , memo = opt )
+            return Rule ( rulename [0] , rulename [1] , more_alts , flags = opt or [] )
         self._reset(mark)
         if (
             (rulename := self.rulename())
             and
-            (opt := self.memoflag(),)
+            (opt := self.flags(),)
             and
             (literal := self.expect(":"))
             and
@@ -196,7 +197,7 @@ class GeneratedParser(Parser):
             and
             (_newline := self.expect('NEWLINE'))
         ):
-            return Rule ( rulename [0] , rulename [1] , alts , memo = opt )
+            return Rule ( rulename [0] , rulename [1] , alts , flags = opt or [] )
         self._reset(mark)
         return None
 
@@ -219,17 +220,35 @@ class GeneratedParser(Parser):
         return None
 
     @memoize
-    def memoflag(self) -> Optional[str]:
-        # memoflag: '(' "memo" ')'
+    def flags(self) -> Optional[list]:
+        # flags: '(' ','.flag+ ','? ')'
         mark = self._mark()
         if (
             (literal := self.expect('('))
             and
-            (literal_1 := self.expect("memo"))
+            (a := self._gather_1())
             and
-            (literal_2 := self.expect(')'))
+            (opt := self.expect(','),)
+            and
+            (literal_1 := self.expect(')'))
+        ):
+            return a
+        self._reset(mark)
+        return None
+
+    @memoize
+    def flag(self) -> Optional[str]:
+        # flag: "memo" | "$"
+        mark = self._mark()
+        if (
+            (literal := self.expect("memo"))
         ):
             return "memo"
+        self._reset(mark)
+        if (
+            (literal := self.expect("$"))
+        ):
+            return "$"
         self._reset(mark)
         return None
 
@@ -314,9 +333,20 @@ class GeneratedParser(Parser):
         return None
 
     @memoize
-    def items(self) -> Optional[NamedItemList]:
-        # items: named_item items | named_item
+    def items(self) -> Optional[Items]:
+        # items: '$' '(' items ')' | named_item items | named_item
         mark = self._mark()
+        if (
+            (literal := self.expect('$'))
+            and
+            (literal_1 := self.expect('('))
+            and
+            (items := self.items())
+            and
+            (literal_2 := self.expect(')'))
+        ):
+            return [TemplateGroup ( items )]
+        self._reset(mark)
         if (
             (named_item := self.named_item())
             and
@@ -648,6 +678,36 @@ class GeneratedParser(Parser):
             (op := self.op())
         ):
             return op . string
+        self._reset(mark)
+        return None
+
+    @memoize
+    def _loop0_2(self) -> Optional[Any]:
+        # _loop0_2: ',' flag
+        mark = self._mark()
+        children = []
+        while (
+            (literal := self.expect(','))
+            and
+            (elem := self.flag())
+        ):
+            children.append(elem)
+            mark = self._mark()
+        self._reset(mark)
+        return children
+
+    @memoize
+    def _gather_1(self) -> Optional[Any]:
+        # _gather_1: flag _loop0_2
+        mark = self._mark()
+        if (
+            (elem := self.flag())
+            is not None
+            and
+            (seq := self._loop0_2())
+            is not None
+        ):
+            return [elem] + seq
         self._reset(mark)
         return None
 

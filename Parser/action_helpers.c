@@ -893,6 +893,27 @@ _PyPegen_ensure_real(Parser *p, expr_ty exp)
     return exp;
 }
 
+int
+_PyPegen_as_pos_c_int(Parser *p, expr_ty exp)
+{
+    if (exp->kind != Constant_kind || !PyLong_CheckExact(exp->v.Constant.value)) {
+        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(exp, "positive integer required in number literal");
+        return -1;
+    }
+    int res = _PyLong_AsInt(exp->v.Constant.value);
+    if (res < 0) {
+        if (PyErr_Occurred()) {
+            /* overflow */
+            RAISE_SYNTAX_ERROR_KNOWN_LOCATION(exp, "Python int too large to convert to C int");
+        }
+        else {
+            RAISE_SYNTAX_ERROR_KNOWN_LOCATION(exp, "positive integer required in number literal");
+        }
+        return -1;
+    }
+    return res;
+}
+
 mod_ty
 _PyPegen_make_module(Parser *p, asdl_stmt_seq *a) {
     asdl_type_ignore_seq *type_ignores = NULL;

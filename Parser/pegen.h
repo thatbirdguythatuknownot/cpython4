@@ -335,6 +335,7 @@ expr_ty _PyPegen_concatenate_strings(Parser *p, asdl_expr_seq *, int, int, int, 
 expr_ty _PyPegen_FetchRawForm(Parser *p, int, int, int, int);
 expr_ty _PyPegen_ensure_imaginary(Parser *p, expr_ty);
 expr_ty _PyPegen_ensure_real(Parser *p, expr_ty);
+int _PyPegen_as_pos_c_int(Parser *p, expr_ty);
 asdl_seq *_PyPegen_join_sequences(Parser *, asdl_seq *, asdl_seq *);
 int _PyPegen_check_braces(Parser *);
 stmt_ty _PyPegen_check_barry_import(Parser *, stmt_ty);

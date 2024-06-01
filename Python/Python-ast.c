@@ -229,6 +229,7 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->generators);
     Py_CLEAR(state->guard);
     Py_CLEAR(state->handlers);
+    Py_CLEAR(state->has_templates);
     Py_CLEAR(state->id);
     Py_CLEAR(state->ifs);
     Py_CLEAR(state->is_async);
@@ -340,6 +341,7 @@ static int init_identifiers(struct ast_state *state)
     if ((state->generators = PyUnicode_InternFromString("generators")) == NULL) return 0;
     if ((state->guard = PyUnicode_InternFromString("guard")) == NULL) return 0;
     if ((state->handlers = PyUnicode_InternFromString("handlers")) == NULL) return 0;
+    if ((state->has_templates = PyUnicode_InternFromString("has_templates")) == NULL) return 0;
     if ((state->id = PyUnicode_InternFromString("id")) == NULL) return 0;
     if ((state->ifs = PyUnicode_InternFromString("ifs")) == NULL) return 0;
     if ((state->is_async = PyUnicode_InternFromString("is_async")) == NULL) return 0;
@@ -596,6 +598,7 @@ static const char * const UnaryOp_fields[]={
 static const char * const Composition_fields[]={
     "arg",
     "func",
+    "has_templates",
 };
 static const char * const Lambda_fields[]={
     "args",
@@ -667,6 +670,7 @@ static const char * const Constant_fields[]={
     "kind",
 };
 static const char * const Template_fields[]={
+    "level",
     "last",
 };
 static const char * const CompoundExpr_fields[]={
@@ -1440,7 +1444,7 @@ init_types(struct ast_state *state)
         "     | NamedExpr(expr target, expr value)\n"
         "     | BinOp(expr left, operator op, expr right)\n"
         "     | UnaryOp(unaryop op, expr operand)\n"
-        "     | Composition(expr arg, expr func)\n"
+        "     | Composition(expr arg, expr func, int has_templates)\n"
         "     | Lambda(arguments args, expr body)\n"
         "     | IfExp(expr test, expr body, expr orelse)\n"
         "     | Dict(expr* keys, expr* values)\n"
@@ -1458,7 +1462,7 @@ init_types(struct ast_state *state)
         "     | FormattedValue(expr value, int conversion, expr? format_spec)\n"
         "     | JoinedStr(expr* values)\n"
         "     | Constant(constant value, string? kind)\n"
-        "     | Template(int last)\n"
+        "     | Template(int level, int last)\n"
         "     | CompoundExpr(stmt value)\n"
         "     | BlockExpr(stmt* body)\n"
         "     | ExprTarget(expr value)\n"
@@ -1493,8 +1497,8 @@ init_types(struct ast_state *state)
         "UnaryOp(unaryop op, expr operand)");
     if (!state->UnaryOp_type) return 0;
     state->Composition_type = make_type(state, "Composition", state->expr_type,
-                                        Composition_fields, 2,
-        "Composition(expr arg, expr func)");
+                                        Composition_fields, 3,
+        "Composition(expr arg, expr func, int has_templates)");
     if (!state->Composition_type) return 0;
     state->Lambda_type = make_type(state, "Lambda", state->expr_type,
                                    Lambda_fields, 2,
@@ -1575,8 +1579,8 @@ init_types(struct ast_state *state)
     if (PyObject_SetAttr(state->Constant_type, state->kind, Py_None) == -1)
         return 0;
     state->Template_type = make_type(state, "Template", state->expr_type,
-                                     Template_fields, 1,
-        "Template(int last)");
+                                     Template_fields, 2,
+        "Template(int level, int last)");
     if (!state->Template_type) return 0;
     state->CompoundExpr_type = make_type(state, "CompoundExpr",
                                          state->expr_type, CompoundExpr_fields,
@@ -3003,8 +3007,9 @@ _PyAST_UnaryOp(unaryop_ty op, expr_ty operand, int lineno, int col_offset, int
 }
 
 expr_ty
-_PyAST_Composition(expr_ty arg, expr_ty func, int lineno, int col_offset, int
-                   end_lineno, int end_col_offset, PyArena *arena)
+_PyAST_Composition(expr_ty arg, expr_ty func, int has_templates, int lineno,
+                   int col_offset, int end_lineno, int end_col_offset, PyArena
+                   *arena)
 {
     expr_ty p;
     if (!arg) {
@@ -3023,6 +3028,7 @@ _PyAST_Composition(expr_ty arg, expr_ty func, int lineno, int col_offset, int
     p->kind = Composition_kind;
     p->v.Composition.arg = arg;
     p->v.Composition.func = func;
+    p->v.Composition.has_templates = has_templates;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -3426,14 +3432,15 @@ _PyAST_Constant(constant value, string kind, int lineno, int col_offset, int
 }
 
 expr_ty
-_PyAST_Template(int last, int lineno, int col_offset, int end_lineno, int
-                end_col_offset, PyArena *arena)
+_PyAST_Template(int level, int last, int lineno, int col_offset, int
+                end_lineno, int end_col_offset, PyArena *arena)
 {
     expr_ty p;
     p = (expr_ty)_PyArena_Malloc(arena, sizeof(*p));
     if (!p)
         return NULL;
     p->kind = Template_kind;
+    p->v.Template.level = level;
     p->v.Template.last = last;
     p->lineno = lineno;
     p->col_offset = col_offset;
@@ -4932,6 +4939,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         if (PyObject_SetAttr(result, state->func, value) == -1)
             goto failed;
         Py_DECREF(value);
+        value = ast2obj_int(state, o->v.Composition.has_templates);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->has_templates, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         break;
     case Lambda_kind:
         tp = (PyTypeObject *)state->Lambda_type;
@@ -5211,6 +5223,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         tp = (PyTypeObject *)state->Template_type;
         result = PyType_GenericNew(tp, NULL, NULL);
         if (!result) goto failed;
+        value = ast2obj_int(state, o->v.Template.level);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->level, value) == -1)
+            goto failed;
+        Py_DECREF(value);
         value = ast2obj_int(state, o->v.Template.last);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->last, value) == -1)
@@ -9627,6 +9644,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
     if (isinstance) {
         expr_ty arg;
         expr_ty func;
+        int has_templates;
 
         if (PyObject_GetOptionalAttr(obj, state->arg, &tmp) < 0) {
             return 1;
@@ -9662,8 +9680,25 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Composition(arg, func, lineno, col_offset, end_lineno,
-                                  end_col_offset, arena);
+        if (PyObject_GetOptionalAttr(obj, state->has_templates, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"has_templates\" missing from Composition");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Composition' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &has_templates, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Composition(arg, func, has_templates, lineno, col_offset,
+                                  end_lineno, end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;
     }
@@ -10781,8 +10816,26 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         return 1;
     }
     if (isinstance) {
+        int level;
         int last;
 
+        if (PyObject_GetOptionalAttr(obj, state->level, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"level\" missing from Template");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Template' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &level, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
         if (PyObject_GetOptionalAttr(obj, state->last, &tmp) < 0) {
             return 1;
         }
@@ -10800,7 +10853,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Template(last, lineno, col_offset, end_lineno,
+        *out = _PyAST_Template(level, last, lineno, col_offset, end_lineno,
                                end_col_offset, arena);
         if (*out == NULL) goto failed;
         return 0;

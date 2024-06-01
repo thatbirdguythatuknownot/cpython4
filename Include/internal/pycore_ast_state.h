@@ -217,6 +217,7 @@ struct ast_state {
     PyObject *generators;
     PyObject *guard;
     PyObject *handlers;
+    PyObject *has_templates;
     PyObject *id;
     PyObject *ifs;
     PyObject *is_async;

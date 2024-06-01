@@ -185,9 +185,9 @@ assignment[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=top_rhs !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[top_rhs] { (--p->subn, d) }) {
+    | a=single_target '|>=' ~ $( c=top_rhs ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[top_rhs] { (--p->subn, d) }) {
+    | a=aug_target '|>=' ~ $( c=top_rhs ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=unarassign &(';' | NEWLINE) {
          _PyAST_AugAssign(a, b->kind, NULL, EXTRA) }
@@ -308,9 +308,9 @@ assignment_block[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr] { (--p->subn, d) }) {
+    | a=single_target '|>=' ~ $( c=block_expr ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr] { (--p->subn, d) }) {
+    | a=aug_target '|>=' ~ $( c=block_expr ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
@@ -330,9 +330,9 @@ assignment_block_nonewline[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr_nonewline !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr_nonewline] { (--p->subn, d) }) {
+    | a=single_target '|>=' ~ $( c=block_expr_nonewline ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target t=(t='|>=' { (++p->subn, t) }) ~ c=(d=[block_expr_nonewline] { (--p->subn, d) }) {
+    | a=aug_target '|>=' ~ $( c=block_expr_nonewline ) {
          _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr_nonewline {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
@@ -860,7 +860,7 @@ literal_expr[expr_ty]:
 complex_number[expr_ty]:
     | real=signed_real_number '+' imag=imaginary_number {
         _PyAST_BinOp(real, Add, imag, EXTRA) }
-    | real=signed_real_number '-' imag=imaginary_number  {
+    | real=signed_real_number '-' imag=imaginary_number {
         _PyAST_BinOp(real, Sub, imag, EXTRA) }
 
 signed_number[expr_ty]:
@@ -1005,7 +1005,7 @@ type_alias[stmt_ty]:
 # Type parameter declaration
 # --------------------------
 
-type_params[asdl_type_param_seq*]: '[' t=type_param_seq  ']' {
+type_params[asdl_type_param_seq*]: '[' t=type_param_seq ']' {
         CHECK_VERSION(asdl_type_param_seq *, 12, "Type parameter lists are", t) }
 
 type_param_seq[asdl_type_param_seq*]: a[asdl_type_param_seq*]=','.type_param+ [','] { a }
@@ -1157,8 +1157,8 @@ isnot_composition[CmpopExprPair*]: 'is' 'not' a=composition { _PyPegen_cmpop_exp
 is_composition[CmpopExprPair*]: 'is' a=composition { _PyPegen_cmpop_expr_pair(p, Is, a) }
 
 composition[expr_ty]:
-    | a=composition t=(t='|>' { (++p->subn, t) }) b=(c=bitwise_or? { (--p->subn, c) }) {
-        _PyAST_Composition(a, b, EXTRA) }
+    | a=composition '|>' $( b=bitwise_or ) {
+        _PyAST_Composition(a, b, 0, EXTRA) }
     | bitwise_or
 
 # Bitwise operators
@@ -1252,15 +1252,16 @@ atom[expr_ty]:
     | 'True' { _PyAST_Constant(Py_True, NULL, EXTRA) }
     | 'False' { _PyAST_Constant(Py_False, NULL, EXTRA) }
     | 'None' { _PyAST_Constant(Py_None, NULL, EXTRA) }
-    | a='$' {
-        p->subn > 0 ?
-        _PyAST_Template(0, EXTRA) :
-        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template not in righthand side of pipe operation") }
+    | a='$' b[int]=[pos_c_int_opt] {
+        b == -1 ? NULL :
+            b < p->subn ?
+            _PyAST_Template(b, 0, EXTRA) :
+            RAISE_SYNTAX_ERROR_KNOWN_LOCATION(a, "template index out of range") }
     | &(STRING|FSTRING_START) strings
     | NUMBER
-    | &'(' (compound_expr | tuple | group | tuplecomp | genexp)
-    | &'[' (list | listcomp)
-    | &'{' (dict | set | dictcomp | setcomp)
+    | &'(' (compound_expr | tuplecomp | tuple | group | genexp)
+    | &'[' (listcomp | list)
+    | &'{' (dictcomp | setcomp | dict | set)
     | '...' { _PyAST_Constant(Py_Ellipsis, NULL, EXTRA) }
 
 group[expr_ty]:
@@ -1408,6 +1409,8 @@ fstring[expr_ty]:
 string[expr_ty]: s[Token*]=STRING { _PyPegen_constant_from_string(p, s) }
 strings[expr_ty] (memo): a[asdl_expr_seq*]=(fstring|string)+ { _PyPegen_concatenate_strings(p, a, EXTRA) }
 
+pos_c_int_opt[int]: a=[NUMBER] { a ? _PyPegen_as_pos_c_int(p, a) : 0 }
+
 list[expr_ty]:
     | '[' a=[star_named_expressions] ']' { _PyAST_List(a, Load, EXTRA) }
 
@@ -1473,17 +1476,17 @@ if_prefix_clause[expr_ty]:
     | 'if' z=named_expression ':' &('for' | 'if') { z }
     | 'if' z=named_expression &'->' { z }
 
-listcomp[expr_ty]:
+listcomp[expr_ty] ($):
     | '[' a=star_named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
     | '[' b=for_if_prefix_clauses a=star_named_expression ']' { _PyAST_ListComp(a, b, EXTRA) }
     | invalid_comprehension
 
-tuplecomp[expr_ty]:
+tuplecomp[expr_ty] ($):
     | '(' a=( star_assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
-setcomp[expr_ty]:
+setcomp[expr_ty] ($):
     | '{' a=star_named_noslice_expression b=for_if_clauses '}' { _PyAST_SetComp(a, b, EXTRA) }
     | '{' b=for_if_prefix_clauses a=star_named_noslice_expression '}' { _PyAST_SetComp(a, b, EXTRA) }
     | invalid_comprehension
@@ -1493,7 +1496,7 @@ genexp[expr_ty]:
     | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
     | invalid_comprehension
 
-dictcomp[expr_ty]:
+dictcomp[expr_ty] ($):
     | '{' a=double_starred_kvpair b=for_if_clauses '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | '{' b=for_if_prefix_clauses a=double_starred_kvpair '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | invalid_dict_comprehension
@@ -1683,7 +1686,7 @@ invalid_expression:
         _PyPegen_check_legacy_stmt(p, a) ? NULL : p->tokens[p->mark-1]->level == 0 ? NULL :
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid syntax. Perhaps you forgot a comma?") }
    | a=disjunction 'if' b=disjunction !('else'|':') { RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "expected 'else' after 'if' expression") }
-   | a='lambda' [lambda_params] b=':' &(FSTRING_MIDDLE | fstring_replacement_field)  {
+   | a='lambda' [lambda_params] b=':' &(FSTRING_MIDDLE | fstring_replacement_field) {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "f-string: lambda expressions are not allowed without parentheses") }
 
 

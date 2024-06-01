@@ -133,6 +133,7 @@ extern "C" {
 #define POP_POP3JUMP_IF_NONE                   182
 #define POP_POP4JUMP_IF_NONE                   183
 #define ENTER_EXECUTOR                         230
+#define PIPEARG_MARKER                         233
 #define MIN_INSTRUMENTED_OPCODE                237
 #define INSTRUMENTED_LOAD_SUPER_ATTR           237
 #define INSTRUMENTED_POP_JUMP_IF_NONE          238
@@ -164,8 +165,7 @@ extern "C" {
 #define LOAD_ZERO_SUPER_ATTR                   265
 #define STORE_FAST_MAYBE_NULL                  266
 #define LOAD_CLOSURE                           267
-#define PIPEARG_MARKER                         268
-#define PIPEARG_ENDMARKER                      269
+#define LOAD_TEMPLATE                          268
 #define TO_BOOL_ALWAYS_TRUE                      7
 #define TO_BOOL_BOOL                             8
 #define TO_BOOL_INT                             10

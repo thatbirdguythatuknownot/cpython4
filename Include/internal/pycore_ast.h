@@ -418,6 +418,7 @@ struct _expr {
         struct {
             expr_ty arg;
             expr_ty func;
+            int has_templates;
         } Composition;
 
         struct {
@@ -507,6 +508,7 @@ struct _expr {
         } Constant;
 
         struct {
+            int level;
             int last;
         } Template;
 
@@ -847,9 +849,9 @@ expr_ty _PyAST_BinOp(expr_ty left, operator_ty op, expr_ty right, int lineno,
 expr_ty _PyAST_UnaryOp(unaryop_ty op, expr_ty operand, int lineno, int
                        col_offset, int end_lineno, int end_col_offset, PyArena
                        *arena);
-expr_ty _PyAST_Composition(expr_ty arg, expr_ty func, int lineno, int
-                           col_offset, int end_lineno, int end_col_offset,
-                           PyArena *arena);
+expr_ty _PyAST_Composition(expr_ty arg, expr_ty func, int has_templates, int
+                           lineno, int col_offset, int end_lineno, int
+                           end_col_offset, PyArena *arena);
 expr_ty _PyAST_Lambda(arguments_ty args, expr_ty body, int lineno, int
                       col_offset, int end_lineno, int end_col_offset, PyArena
                       *arena);
@@ -896,8 +898,8 @@ expr_ty _PyAST_JoinedStr(asdl_expr_seq * values, int lineno, int col_offset,
 expr_ty _PyAST_Constant(constant value, string kind, int lineno, int
                         col_offset, int end_lineno, int end_col_offset, PyArena
                         *arena);
-expr_ty _PyAST_Template(int last, int lineno, int col_offset, int end_lineno,
-                        int end_col_offset, PyArena *arena);
+expr_ty _PyAST_Template(int level, int last, int lineno, int col_offset, int
+                        end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_CompoundExpr(stmt_ty value, int lineno, int col_offset, int
                             end_lineno, int end_col_offset, PyArena *arena);
 expr_ty _PyAST_BlockExpr(asdl_stmt_seq * body, int lineno, int col_offset, int

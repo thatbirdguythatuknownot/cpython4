@@ -5,6 +5,7 @@ from typing import IO, Any, Dict, Optional, Sequence, Set, Text, Tuple
 from pegen import grammar
 from pegen.grammar import (
     Alt,
+    TemplateGroup,
     Cut,
     Forced,
     Gather,
@@ -60,6 +61,9 @@ class InvalidNodeVisitor(GrammarVisitor):
         return any(self.visit(alt) for alt in node.alts)
 
     def visit_Alt(self, node: Alt) -> bool:
+        return any(self.visit(item) for item in node.items)
+
+    def visit_TemplateGroup(self, node: TemplateGroup) -> bool:
         return any(self.visit(item) for item in node.items)
 
     def lookahead_call_helper(self, node: Lookahead) -> bool:
@@ -240,7 +244,9 @@ class PythonParserGenerator(ParserGenerator, GrammarVisitor):
             if alt.action and "LOCATIONS" in alt.action:
                 return True
             for n in alt.items:
-                if isinstance(n.item, Group) and self.alts_uses_locations(n.item.rhs.alts):
+                if (isinstance(n, NamedItem)
+                        and isinstance(n.item, Group)
+                        and self.alts_uses_locations(n.item.rhs.alts)):
                     return True
         return False
 
@@ -291,7 +297,7 @@ class PythonParserGenerator(ParserGenerator, GrammarVisitor):
             self.visit(alt, is_loop=is_loop, is_gather=is_gather)
 
     def visit_Alt(self, node: Alt, is_loop: bool, is_gather: bool) -> None:
-        has_cut = any(isinstance(item.item, Cut) for item in node.items)
+        has_cut = any(isinstance(item.item, Cut) for item in node.items if isinstance(item, NamedItem))
         with self.local_variable_context():
             if has_cut:
                 self.print("cut = False")
@@ -301,7 +307,12 @@ class PythonParserGenerator(ParserGenerator, GrammarVisitor):
                 self.print("if (")
             with self.indent():
                 first = True
-                for item in node.items:
+                items = node.items.copy()
+                for i, item in enumerate(items):
+                    if isinstance(item, TemplateGroup):
+                        i += 1
+                        items[i:i] = item.items
+                        continue
                     if first:
                         first = False
                     else:

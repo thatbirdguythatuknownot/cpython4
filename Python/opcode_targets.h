@@ -232,7 +232,7 @@ static void *opcode_targets[256] = {
     &&TARGET_ENTER_EXECUTOR,
     &&_unknown_opcode,
     &&_unknown_opcode,
-    &&_unknown_opcode,
+    &&TARGET_PIPEARG_MARKER,
     &&_unknown_opcode,
     &&_unknown_opcode,
     &&_unknown_opcode,

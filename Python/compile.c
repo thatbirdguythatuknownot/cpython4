@@ -246,7 +246,7 @@ _PyCompile_InstructionSequence_Addop(instr_sequence *seq, int opcode, int oparg,
     assert(0 <= opcode && opcode <= MAX_OPCODE);
     assert(IS_WITHIN_OPCODE_RANGE(opcode));
     assert(OPCODE_HAS_ARG(opcode) || HAS_TARGET(opcode) || oparg == 0);
-    assert(0 <= oparg && oparg < (1 << 30) || opcode == COPY && oparg == -1);
+    assert(0 <= oparg && oparg < (1 << 30));
 
     int idx = instr_sequence_next_inst(seq);
     RETURN_IF_ERROR(idx);
@@ -845,7 +845,6 @@ stack_effect(int opcode, int oparg, int jump)
         case JUMP:
         case JUMP_NO_INTERRUPT:
         case PIPEARG_MARKER:
-        case PIPEARG_ENDMARKER:
             return 0;
 
         case EXIT_INIT_CHECK:
@@ -877,6 +876,8 @@ stack_effect(int opcode, int oparg, int jump)
         case LOAD_ZERO_SUPER_METHOD:
         case LOAD_ZERO_SUPER_ATTR:
             return -1;
+        case LOAD_TEMPLATE:
+            return 1;
         default:
             return PY_INVALID_STACK_EFFECT;
     }
@@ -6114,6 +6115,7 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
         if (is_inlined) {
             ADDOP_I(c, loc, SWAP, 2);
         }
+        ADDOP_I(c, loc, PIPEARG_MARKER, is_inlined << 1);
     }
 
     if (compiler_comprehension_generator(c, loc, generators, 0, 0,
@@ -6133,6 +6135,7 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type,
     }
 
     if (type != COMP_GENEXP) {
+        ADDOP_I(c, loc, PIPEARG_MARKER, 1);
         ADDOP(c, LOC(e), RETURN_VALUE);
     }
     else {
@@ -6462,21 +6465,96 @@ compiler_with(struct compiler *c, stmt_ty s, int pos)
     return SUCCESS;
 }
 
+// Return 1 if the composition-method call was optimized, 0 if not, and -1 on error.
+static int
+maybe_optimize_method_composition(struct compiler *c, expr_ty e)
+{
+    expr_ty meth = e->v.Composition.func;
+
+    /* Check that the call node is an attribute access */
+    if (meth->kind != Attribute_kind || meth->v.Attribute.ctx != Load) {
+        return 0;
+    }
+
+    /* Check that the base object is not something that is imported */
+    if (is_import_originated(c, meth->v.Attribute.value)) {
+        return 0;
+    }
+
+    /* Alright, we can optimize the code. */
+    location loc = LOC(meth);
+
+    if (can_optimize_super_call(c, meth)) {
+        RETURN_IF_ERROR(load_args_for_super(c, meth->v.Attribute.value));
+        int opcode = asdl_seq_LEN(meth->v.Attribute.value->v.Call.args) ?
+            LOAD_SUPER_METHOD : LOAD_ZERO_SUPER_METHOD;
+        ADDOP_NAME(c, loc, opcode, meth->v.Attribute.attr, names);
+        loc = update_start_location_to_match_attr(c, loc, meth);
+        ADDOP(c, loc, NOP);
+    } else {
+        jump_target_label l = NO_LABEL;
+        int made_here = meth->v.Attribute.aware;
+        if (made_here) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            l = l2;
+        }
+        compiler_visit_noneaware(c, meth->v.Attribute.value, l);
+        if (made_here) {
+            ADDOP_I(c, loc, COPY, 1);
+            ADDOP_JUMP(c, loc, POP_JUMP_IF_NONE, l);
+        }
+        loc = update_start_location_to_match_attr(c, loc, meth);
+        ADDOP_NAME(c, loc, LOAD_METHOD, meth->v.Attribute.attr, names);
+        if (made_here) {
+            NEW_JUMP_TARGET_LABEL(c, l2);
+            ADDOP_JUMP(c, loc, JUMP, l2);
+            USE_LABEL(c, l);
+            ADDOP(c, loc, PUSH_NULL);
+            USE_LABEL(c, l2);
+        }
+    }
+
+    loc = update_start_location_to_match_attr(c, LOC(e), meth);
+    ADDOP_I(c, loc, SWAP_N, 3);
+    ADDOP_I(c, loc, CALL, 1);
+    return 1;
+}
+
 static int
 compiler_composition(struct compiler *c, expr_ty e)
 {
     VISIT(c, expr, e->v.Composition.arg);
-    location loc = LOC(e);
-    ADDOP(c, loc, PIPEARG_MARKER); /* for the stack size calculation later */
-    VISIT(c, expr, e->v.Composition.func);
-    ADDOP(c, loc, PIPEARG_ENDMARKER);
+    if (e->v.Composition.has_templates) {
+        location loc = LOC(e);
+        ADDOP_I(c, loc, PIPEARG_MARKER, 0); /* for the stack size calculation later */
+        VISIT(c, expr, e->v.Composition.func);
+        ADDOP_I(c, loc, PIPEARG_MARKER, 1);
+    }
+    else {
+        int ret = maybe_optimize_method_composition(c, e);
+        if (ret < 0) {
+            return ERROR;
+        }
+        if (ret == 1) {
+            return SUCCESS;
+        }
+
+        RETURN_IF_ERROR(check_caller(c, e->v.Composition.func));
+        compiler_visit_noneaware(c, e->v.Composition.func, NO_LABEL);
+        location loc = LOC(e->v.Composition.func);
+        ADDOP(c, loc, PUSH_NULL);
+        loc = LOC(e);
+
+        ADDOP_I(c, loc, SWAP_N, 3);
+        ADDOP_I(c, loc, CALL, 1);
+    }
     return SUCCESS;
 }
 
 static int
 compiler_template(struct compiler *c, expr_ty e)
 {
-    ADDOP_I(c, LOC(e), COPY, ~e->v.Template.last);
+    ADDOP_I(c, LOC(e), LOAD_TEMPLATE, (e->v.Template.level << 1) | e->v.Template.last);
     return SUCCESS;
 }
 
@@ -6972,9 +7050,9 @@ compiler_augassign(struct compiler *c, stmt_ty s)
     loc = LOC(s);
 
     if (s->v.AugAssign.op == Comp) {
-        ADDOP(c, loc, PIPEARG_MARKER);
+        ADDOP_I(c, loc, PIPEARG_MARKER, 0);
         VISIT(c, expr, s->v.AugAssign.value);
-        ADDOP(c, loc, PIPEARG_ENDMARKER);
+        ADDOP_I(c, loc, PIPEARG_MARKER, 1);
     }
     else {
         if (s->v.AugAssign.value) {

@@ -2537,6 +2537,12 @@
             break;
         }
 
+        case PIPEARG_MARKER: {
+            // Technically a NOP, but with an argument
+            assert(oparg >= 0);
+            break;
+        }
+
         case MAKE_FUNCTION: {
             PyObject *codeobj;
             PyObject *func;

@@ -19,8 +19,7 @@
     ((OP) == SETUP_CLEANUP) || \
     ((OP) == SETUP_WITH) || \
     ((OP) == POP_BLOCK) || \
-    ((OP) == PIPEARG_MARKER) || \
-    ((OP) == PIPEARG_ENDMARKER) || \
+    ((OP) == LOAD_TEMPLATE) || \
     0)
 
 #define EXIT_TRACE 300
@@ -471,7 +470,7 @@ _PyOpcode_num_popped(int opcode, int oparg, bool jump) {
             return ((oparg & 1) ? 1 : 0) + 3;
         case PIPEARG_MARKER:
             return 0;
-        case PIPEARG_ENDMARKER:
+        case LOAD_TEMPLATE:
             return 0;
         case MAKE_FUNCTION:
             return 1;
@@ -933,7 +932,7 @@ _PyOpcode_num_pushed(int opcode, int oparg, bool jump) {
             return 1;
         case PIPEARG_MARKER:
             return 0;
-        case PIPEARG_ENDMARKER:
+        case LOAD_TEMPLATE:
             return 0;
         case MAKE_FUNCTION:
             return 1;
@@ -1247,8 +1246,8 @@ const struct opcode_metadata _PyOpcode_opcode_metadata[OPCODE_METADATA_SIZE] = {
     [CALL_NO_KW_METHOD_DESCRIPTOR_FAST] = { true, INSTR_FMT_IBC00, HAS_ARG_FLAG },
     [INSTRUMENTED_CALL_FUNCTION_EX] = { true, INSTR_FMT_IX, 0 },
     [CALL_FUNCTION_EX] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
-    [PIPEARG_MARKER] = { true, INSTR_FMT_IX, 0 },
-    [PIPEARG_ENDMARKER] = { true, INSTR_FMT_IX, 0 },
+    [PIPEARG_MARKER] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
+    [LOAD_TEMPLATE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [MAKE_FUNCTION] = { true, INSTR_FMT_IX, 0 },
     [SET_FUNCTION_ATTRIBUTE] = { true, INSTR_FMT_IB, HAS_ARG_FLAG },
     [RETURN_GENERATOR] = { true, INSTR_FMT_IX, 0 },
@@ -1390,6 +1389,7 @@ const struct opcode_macro_expansion _PyOpcode_macro_expansion[OPCODE_MACRO_EXPAN
     [CALL_NO_KW_METHOD_DESCRIPTOR_O] = { .nuops = 1, .uops = { { CALL_NO_KW_METHOD_DESCRIPTOR_O, 0, 0 } } },
     [CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS] = { .nuops = 1, .uops = { { CALL_NO_KW_METHOD_DESCRIPTOR_NOARGS, 0, 0 } } },
     [CALL_NO_KW_METHOD_DESCRIPTOR_FAST] = { .nuops = 1, .uops = { { CALL_NO_KW_METHOD_DESCRIPTOR_FAST, 0, 0 } } },
+    [PIPEARG_MARKER] = { .nuops = 1, .uops = { { PIPEARG_MARKER, 0, 0 } } },
     [MAKE_FUNCTION] = { .nuops = 1, .uops = { { MAKE_FUNCTION, 0, 0 } } },
     [SET_FUNCTION_ATTRIBUTE] = { .nuops = 1, .uops = { { SET_FUNCTION_ATTRIBUTE, 0, 0 } } },
     [BUILD_SLICE] = { .nuops = 1, .uops = { { BUILD_SLICE, 0, 0 } } },

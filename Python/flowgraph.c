@@ -171,7 +171,7 @@ basicblock_addop(basicblock *b, int opcode, int oparg, location loc)
     assert(IS_WITHIN_OPCODE_RANGE(opcode));
     assert(!IS_ASSEMBLER_OPCODE(opcode));
     assert(OPCODE_HAS_ARG(opcode) || HAS_TARGET(opcode) || oparg == 0);
-    assert(0 <= oparg && oparg < (1 << 30) || opcode == COPY && oparg == -1);
+    assert(0 <= oparg && oparg < (1 << 30));
 
     int off = basicblock_next_instr(b);
     if (off < 0) {
@@ -737,7 +737,7 @@ static int
 calculate_stackdepth(cfg_builder *g)
 {
     /* index for template_subs */
-    int nsubs;
+    int nsubs = 0;
     /* array to keep track of the template substitutions */
     int template_subs[MAX_TEMPLATE_NEST];
     basicblock *entryblock = g->g_entryblock;
@@ -765,27 +765,27 @@ calculate_stackdepth(cfg_builder *g)
         for (int i = 0; i < b->b_iused; i++) {
             cfg_instr *instr = &b->b_instr[i];
             if (instr->i_opcode == PIPEARG_MARKER) {
-                if (nsubs > 255) {
-                    PyErr_Format(PyExc_SyntaxError,
-                                 "max templates exceeded (%d > 256)",
-                                 nsubs + 1);
-                    goto error;
+                if ((instr->i_oparg & 1) == 0) {
+                    if (nsubs > 255) {
+                        PyErr_Format(PyExc_SyntaxError,
+                                     "max templates exceeded (%d > 256)",
+                                     nsubs + 1);
+                        goto error;
+                    }
+                    template_subs[nsubs++] = depth - (instr->i_oparg >> 1);
+                    instr->i_opcode = NOP;
+                    continue;
                 }
-                template_subs[nsubs++] = depth;
-                instr->i_opcode = NOP;
-                continue;
-            }
-            else if (instr->i_opcode == PIPEARG_ENDMARKER) {
-                --nsubs;
-                instr->i_opcode = NOP;
-                continue;
-            }
-            else if (instr->i_opcode == COPY && instr->i_oparg < 0) {
-                if (instr->i_oparg == -2) {
-                    instr->i_opcode = SWAP_N;
+                else {
+                    --nsubs;
+                    instr->i_opcode = NOP;
+                    continue;
                 }
+            }
+            else if (instr->i_opcode == LOAD_TEMPLATE) {
+                instr->i_opcode = (instr->i_oparg & 1) ? SWAP_N : COPY;
                 instr->i_oparg =
-                    depth - template_subs[nsubs - 1] + 1;
+                    depth - template_subs[nsubs - (instr->i_oparg >> 1) - 1] + 1;
                 if (instr->i_opcode == SWAP_N && instr->i_oparg == 1) {
                     instr->i_opcode = NOP;
                 }
@@ -1861,7 +1861,7 @@ scan_block_for_locals(basicblock *b, basicblock ***sp)
         if (instr->i_oparg >= 64) {
             continue;
         }
-        assert(instr->i_oparg >= 0 || instr->i_opcode == COPY);
+        assert(instr->i_oparg >= 0);
         uint64_t bit = (uint64_t)1 << instr->i_oparg;
         switch (instr->i_opcode) {
             case DELETE_FAST:

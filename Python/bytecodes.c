@@ -3552,12 +3552,13 @@ dummy_func(
             CHECK_EVAL_BREAKER();
         }
 
-        pseudo(PIPEARG_MARKER) = {
-            NOP,
-        };
+        inst(PIPEARG_MARKER, (--)) {
+            // Technically a NOP, but with an argument
+            assert(oparg >= 0);
+        }
 
-        pseudo(PIPEARG_ENDMARKER) = {
-            NOP,
+        pseudo(LOAD_TEMPLATE) = {
+            PIPEARG_MARKER,
         };
 
         inst(MAKE_FUNCTION, (codeobj -- func)) {

@@ -9,11 +9,24 @@
 
 
 typedef struct {
+    expr_ty sub;
+    expr_ty last;
+} _comp_entry;
+
+typedef struct {
+    _comp_entry *arr;
+    Py_ssize_t capacity;
+    Py_ssize_t n;
+} _comp_list;
+
+typedef struct {
     int optimize;
     int ff_features;
 
     int recursion_depth;            /* current recursion depth */
     int recursion_limit;            /* recursion limit */
+
+    _comp_list *comp_ptr;
 } _PyASTOptimizeState;
 
 
@@ -679,271 +692,6 @@ fold_compare(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
     return 1;
 }
 
-#define CALL(ARG) \
-    if (!fold_comp_internal((ARG), ptr, sub, state)) \
-        return 0;
-
-#define CALL_OPT(ARG) \
-    if ((ARG) != NULL && !fold_comp_internal((ARG), ptr, sub, state)) \
-        return 0;
-
-#define CALL_SEQ(FUNC, TYPE, ARG) { \
-    int i; \
-    asdl_ ## TYPE ## _seq *seq = (ARG); /* avoid variable capture */ \
-    for (i = 0; i < asdl_seq_LEN(seq); i++) { \
-        TYPE ## _ty elt = (TYPE ## _ty)asdl_seq_GET(seq, i); \
-        if (elt != NULL && !FUNC(elt, ptr, sub, state)) \
-            return 0; \
-    } \
-}
-
-static int fold_comp_compinternal(comprehension_ty, expr_ty *, expr_ty,
-                                  _PyASTOptimizeState *);
-static int fold_comp_keywordinternal(keyword_ty, expr_ty *, expr_ty,
-                                     _PyASTOptimizeState *);
-static int fold_comp_argumentsinternal(arguments_ty, expr_ty *, expr_ty,
-                                       _PyASTOptimizeState *);
-static int fold_comp_arginternal(arg_ty, expr_ty *, expr_ty,
-                                 _PyASTOptimizeState *);
-
-static int
-fold_comp_internal(expr_ty node_, expr_ty *ptr, expr_ty sub,
-                   _PyASTOptimizeState *state)
-{
-    switch (node_->kind) {
-    case BoolOp_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.BoolOp.values);
-        break;
-    case BinOp_kind:
-        CALL(node_->v.BinOp.left);
-        CALL(node_->v.BinOp.right);
-        break;
-    case UnaryOp_kind:
-        CALL(node_->v.UnaryOp.operand);
-        break;
-    case Lambda_kind:
-        if (!fold_comp_argumentsinternal(node_->v.Lambda.args, ptr,
-                                         sub, state))
-        {
-            return 0;
-        }
-        CALL(node_->v.Lambda.body);
-        break;
-    case IfExp_kind:
-        CALL(node_->v.IfExp.test);
-        CALL(node_->v.IfExp.body);
-        CALL(node_->v.IfExp.orelse);
-        break;
-    case Dict_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Dict.keys);
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Dict.values);
-        break;
-    case Set_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Set.elts);
-        break;
-    case ListComp_kind:
-        CALL(node_->v.ListComp.elt);
-        CALL_SEQ(fold_comp_compinternal, comprehension,
-                 node_->v.ListComp.generators);
-        break;
-    case TupleComp_kind:
-        CALL(node_->v.TupleComp.elt);
-        CALL_SEQ(fold_comp_compinternal, comprehension,
-                 node_->v.TupleComp.generators);
-        break;
-    case SetComp_kind:
-        CALL(node_->v.SetComp.elt);
-        CALL_SEQ(fold_comp_compinternal, comprehension,
-                 node_->v.SetComp.generators);
-        break;
-    case DictComp_kind:
-        CALL(node_->v.DictComp.key);
-        CALL(node_->v.DictComp.value);
-        CALL_SEQ(fold_comp_compinternal, comprehension,
-                 node_->v.DictComp.generators);
-        break;
-    case GeneratorExp_kind:
-        CALL(node_->v.GeneratorExp.elt);
-        CALL_SEQ(fold_comp_compinternal, comprehension,
-                 node_->v.GeneratorExp.generators);
-        break;
-    case Await_kind:
-        CALL(node_->v.Await.value);
-        break;
-    case Yield_kind:
-        CALL_OPT(node_->v.Yield.value);
-        break;
-    case YieldFrom_kind:
-        CALL(node_->v.YieldFrom.value);
-        break;
-    case Compare_kind:
-        CALL(node_->v.Compare.left);
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Compare.comparators);
-        break;
-    case Call_kind:
-        CALL(node_->v.Call.func);
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Call.args);
-        CALL_SEQ(fold_comp_keywordinternal, keyword, node_->v.Call.keywords);
-        break;
-    case FormattedValue_kind:
-        CALL(node_->v.FormattedValue.value);
-        CALL_OPT(node_->v.FormattedValue.format_spec);
-        break;
-    case JoinedStr_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.JoinedStr.values);
-        break;
-    case Attribute_kind:
-        CALL(node_->v.Attribute.value);
-        break;
-    case Subscript_kind:
-        CALL(node_->v.Subscript.value);
-        CALL(node_->v.Subscript.slice);
-        break;
-    case Starred_kind:
-        CALL(node_->v.Starred.value);
-        break;
-    case Slice_kind:
-        CALL_OPT(node_->v.Slice.lower);
-        CALL_OPT(node_->v.Slice.upper);
-        CALL_OPT(node_->v.Slice.step);
-        break;
-    case List_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.List.elts);
-        break;
-    case Tuple_kind:
-        CALL_SEQ(fold_comp_internal, expr, node_->v.Tuple.elts);
-        break;
-    case NamedExpr_kind:
-        CALL(node_->v.NamedExpr.value);
-        break;
-    case Template_kind:
-        if (sub) {
-            COPY_NODE(node_, sub);
-        }
-        *ptr = node_;
-        break;
-    case Composition_kind:
-    case Name_kind:
-    case Constant_kind:
-        break;
-    }
-
-    return 1;
-}
-
-static int
-fold_comp_compinternal(comprehension_ty node_, expr_ty *ptr, expr_ty sub,
-                       _PyASTOptimizeState *state)
-{
-    CALL(node_->target);
-    CALL(node_->iter);
-    CALL_SEQ(fold_comp_internal, expr, node_->ifs);
-    return 1;
-}
-
-static int
-fold_comp_keywordinternal(keyword_ty node_, expr_ty *ptr, expr_ty sub,
-                          _PyASTOptimizeState *state)
-{
-    CALL(node_->value);
-    return 1;
-}
-
-static int
-fold_comp_argumentsinternal(arguments_ty node_, expr_ty *ptr, expr_ty sub,
-                            _PyASTOptimizeState *state)
-{
-    CALL_SEQ(fold_comp_arginternal, arg, node_->posonlyargs);
-    CALL_SEQ(fold_comp_arginternal, arg, node_->args);
-    if (node_->vararg != NULL &&
-        !fold_comp_arginternal(node_->vararg, ptr, sub, state))
-        return 0;
-    CALL_SEQ(fold_comp_arginternal, arg, node_->kwonlyargs);
-    CALL_SEQ(fold_comp_internal, expr, node_->kw_defaults);
-    if (node_->kwarg != NULL &&
-        !fold_comp_arginternal(node_->kwarg, ptr, sub, state))
-        return 0;
-    CALL_SEQ(fold_comp_internal, expr, node_->defaults);
-    return 1;
-}
-
-static int
-fold_comp_arginternal(arg_ty node_, expr_ty *ptr, expr_ty sub,
-                      _PyASTOptimizeState *state)
-{
-    if (!(state->ff_features & CO_FUTURE_ANNOTATIONS)) {
-        CALL_OPT(node_->annotation);
-    }
-    return 1;
-}
-
-static int astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
-
-static int
-fold_comp(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
-{
-    expr_ty arg;
-    expr_ty func;
-    expr_ty ptr = NULL;
-    int constant = 1;
-
-    arg = node->v.Composition.arg;
-    if (arg->kind != Constant_kind) {
-        constant = 0;
-    }
-
-    func = node->v.Composition.func;
-    if (!fold_comp_internal(func, &ptr, constant ? arg : NULL, state)) {
-        return 0;
-    }
-
-    if (!ptr) {
-        asdl_expr_seq *seq =
-            (asdl_expr_seq*)_Py_asdl_generic_seq_new(1, arena);
-        if (!seq) {
-            return 0;
-        }
-        asdl_seq_SET(seq, 0, arg);
-        node->kind = Call_kind;
-        node->v.Call.func = func;
-        node->v.Call.args = seq;
-        node->v.Call.keywords = NULL;
-    }
-    else {
-        if (constant) {
-            COPY_NODE(node, func);
-            return astfold_expr(node, arena, state); /* second pass */
-        }
-        ptr->v.Template.last = 1;
-    }
-
-    return 1;
-}
-
-static int
-fold_compassign(stmt_ty node, PyArena *arena, _PyASTOptimizeState *state)
-{
-    expr_ty ptr = NULL;
-
-    assert(node->v.AugAssign.value);
-    if (!fold_comp_internal(node->v.AugAssign.value, &ptr, NULL, state)) {
-        return 0;
-    }
-
-    if (!ptr) {
-        node->v.AugAssign.op = CompCall;
-    }
-    else {
-        ptr->v.Template.last = 1;
-    }
-
-    return 1;
-}
-
-#undef CALL
-#undef CALL_OPT
-#undef CALL_SEQ
-
 static int
 fold_slice(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 {
@@ -992,6 +740,7 @@ fold_slice(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 
 static int astfold_mod(mod_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
+static int astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_arguments(arguments_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_comprehension(comprehension_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
 static int astfold_keyword(keyword_ty node_, PyArena *ctx_, _PyASTOptimizeState *state);
@@ -1021,6 +770,103 @@ static int astfold_type_param(type_param_ty node_, PyArena *ctx_, _PyASTOptimize
     } \
 }
 
+static inline _comp_entry *
+add_comp_entry(_comp_list *ptr, expr_ty sub)
+{
+    assert(ptr && ptr->arr);
+    if (ptr->n == ptr->capacity) {
+        _comp_entry *new_arr = PyMem_Realloc(ptr->arr, 2 * ptr->capacity);
+        if (new_arr == NULL) {
+            PyErr_NoMemory();
+            return NULL;
+        }
+        ptr->arr = new_arr;
+        ptr->capacity *= 2;
+    }
+
+    _comp_entry *entry = &ptr->arr[ptr->n++];
+    entry->sub = sub;
+    entry->last = NULL;
+    return entry;
+}
+
+static int
+fold_comp(expr_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
+{
+    expr_ty arg;
+    expr_ty func;
+    int constant = 1;
+
+    assert(node->kind == Composition_kind);
+
+    CALL(astfold_expr, expr_ty, node->v.Composition.arg);
+
+    arg = node->v.Composition.arg;
+    if (arg->kind != Constant_kind) {
+        constant = 0;
+    }
+
+    _comp_entry *entry = add_comp_entry(state->comp_ptr, constant ? arg : NULL);
+    if (entry == NULL) {
+        return 0;
+    }
+
+    func = node->v.Composition.func;
+    CALL(astfold_expr, expr_ty, func);
+
+    if (!entry->last) {
+        if (constant) {
+            asdl_expr_seq *seq =
+                (asdl_expr_seq*)_Py_asdl_generic_seq_new(1, ctx_);
+            if (!seq) {
+                return 0;
+            }
+            asdl_seq_SET(seq, 0, arg);
+            node->kind = Call_kind;
+            node->v.Call.func = func;
+            node->v.Call.args = seq;
+            node->v.Call.keywords = NULL;
+            node->v.Call.aware = 0;
+        }
+    }
+    else {
+        if (constant) {
+            COPY_NODE(node, func);
+            CALL(astfold_expr, expr_ty, node); /* second pass */
+        }
+        else {
+            entry->last->v.Template.last = 1;
+            node->v.Composition.has_templates = 1;
+        }
+    }
+
+    state->comp_ptr->n--;
+    return 1;
+}
+
+static int
+fold_compassign(stmt_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
+{
+    assert(node->kind == AugAssign_kind);
+    assert(node->v.AugAssign.value);
+
+    _comp_entry *entry = add_comp_entry(state->comp_ptr, NULL);
+    if (entry == NULL) {
+        return 0;
+    }
+
+    CALL(astfold_expr, expr_ty, node->v.AugAssign.value);
+
+    if (!entry->last) {
+        node->v.AugAssign.op = CompCall;
+    }
+    else {
+        entry->last->v.Template.last = 1;
+    }
+
+    state->comp_ptr->n--;
+    return 1;
+}
 
 static int
 astfold_body(asdl_stmt_seq *stmts, PyArena *ctx_, _PyASTOptimizeState *state)
@@ -1070,6 +916,8 @@ astfold_mod(mod_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 static int
 astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
 {
+    _comp_entry *entry;
+
     if (++state->recursion_depth > state->recursion_limit) {
         PyErr_SetString(PyExc_RecursionError,
                         "maximum recursion depth exceeded during compilation");
@@ -1105,21 +953,41 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_SEQ(astfold_expr, expr, node_->v.Set.elts);
         break;
     case ListComp_kind:
+        entry = add_comp_entry(state->comp_ptr, NULL);
+        if (entry == NULL) {
+            return 0;
+        }
         CALL(astfold_expr, expr_ty, node_->v.ListComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.ListComp.generators);
+        state->comp_ptr->n--;
         break;
     case TupleComp_kind:
+        entry = add_comp_entry(state->comp_ptr, NULL);
+        if (entry == NULL) {
+            return 0;
+        }
         CALL(astfold_expr, expr_ty, node_->v.TupleComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.TupleComp.generators);
+        state->comp_ptr->n--;
         break;
     case SetComp_kind:
+        entry = add_comp_entry(state->comp_ptr, NULL);
+        if (entry == NULL) {
+            return 0;
+        }
         CALL(astfold_expr, expr_ty, node_->v.SetComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.SetComp.generators);
+        state->comp_ptr->n--;
         break;
     case DictComp_kind:
+        entry = add_comp_entry(state->comp_ptr, NULL);
+        if (entry == NULL) {
+            return 0;
+        }
         CALL_OPT(astfold_expr, expr_ty, node_->v.DictComp.key);
         CALL(astfold_expr, expr_ty, node_->v.DictComp.value);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.DictComp.generators);
+        state->comp_ptr->n--;
         break;
     case GeneratorExp_kind:
         CALL(astfold_expr, expr_ty, node_->v.GeneratorExp.elt);
@@ -1200,8 +1068,6 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL(astfold_expr, expr_ty, node_->v.NamedExpr.value);
         break;
     case Composition_kind:
-        CALL(astfold_expr, expr_ty, node_->v.Composition.arg);
-        CALL(astfold_expr, expr_ty, node_->v.Composition.func);
         CALL(fold_comp, expr_ty, node_);
         break;
     case CompoundExpr_kind:
@@ -1212,8 +1078,19 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         break;
     case ExprTarget_kind:
         CALL(astfold_expr, expr_ty, node_->v.ExprTarget.value);
-    case Constant_kind:
     case Template_kind:
+    {
+        assert(node_->v.Template.level < state->comp_ptr->n);
+
+        _comp_entry *entry =
+            &state->comp_ptr->arr[state->comp_ptr->n - node_->v.Template.level - 1];
+        if (entry->sub) {
+            COPY_NODE(node_, entry->sub);
+        }
+        entry->last = node_;
+        break;
+    }
+    case Constant_kind:
         // nothing further to do
         break;
     // No default case, so the compiler will emit a warning if new expression
@@ -1572,6 +1449,9 @@ _PyAST_Optimize(mod_ty mod, PyArena *arena, int optimize, int ff_features)
     starting_recursion_depth = recursion_depth * COMPILER_STACK_FRAME_SCALE;
     state.recursion_depth = starting_recursion_depth;
     state.recursion_limit = C_RECURSION_LIMIT * COMPILER_STACK_FRAME_SCALE;
+    state.comp_ptr = (_comp_list *)PyMem_Malloc(sizeof(_comp_list));    if (state.comp_ptr == NULL) {
+        PyErr_NoMemory();        return 0;    }    state.comp_ptr->arr = (_comp_entry *)PyMem_Malloc(2 * sizeof(_comp_entry));    if (state.comp_ptr->arr == NULL) {
+        PyErr_NoMemory();        return 0;    }    state.comp_ptr->capacity = 2;    state.comp_ptr->n = 0;
 
     int ret = astfold_mod(mod, arena, &state);
     assert(ret || PyErr_Occurred());
@@ -1583,6 +1463,10 @@ _PyAST_Optimize(mod_ty mod, PyArena *arena, int optimize, int ff_features)
             starting_recursion_depth, state.recursion_depth);
         return 0;
     }
+
+    assert(state.comp_ptr->n == 0);
+    PyMem_Free(state.comp_ptr->arr);
+    PyMem_Free(state.comp_ptr);
 
     return ret;
 }

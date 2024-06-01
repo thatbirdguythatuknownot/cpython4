@@ -1283,6 +1283,8 @@ lambdef[expr_ty]:
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
     | '(' a=[params] ')' '=>' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+    | a=single_params? '=>' b=expression {
+        _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
 
 lambda_params[arguments_ty]:
     | invalid_lambda_parameters
@@ -1385,6 +1387,31 @@ sum_param_star_annotation[arg_ty]: a=NAME b=star_sum_annotation { _PyAST_arg(a->
 sum_annotation[expr_ty]: ':' a=sum { a }
 star_sum_annotation[expr_ty]: ':' a=star_sum { a }
 sum_default[expr_ty]: '=' a=sum { a } | invalid_sum_default
+
+single_params[arguments_ty]:
+    | a=single_param_slash {
+        CHECK_VERSION(
+            arguments_ty,
+            8,
+            "Positional-only parameters are",
+            _PyPegen_make_arguments(p, (asdl_arg_seq *)_PyPegen_singleton_seq(p, a),
+                                    NULL, NULL, NULL, NULL)
+        ) }
+    | '*' a=single_param_normal {
+        _PyPegen_make_arguments(
+            p, NULL, NULL, NULL, NULL,
+            _PyPegen_star_etc(p, NULL, _PyPegen_singleton_seq(p, _PyPegen_name_default_pair(p, a, NULL, NULL)), NULL)
+        ) }
+    | a=single_param_normal {
+        _PyPegen_make_arguments(p, NULL, NULL, (asdl_arg_seq *)_PyPegen_singleton_seq(p, a), NULL, NULL) }
+
+single_param_slash[arg_ty]:
+    | a=single_param '/' tc=TYPE_COMMENT? &'=>' { _PyPegen_add_type_comment_to_arg(p, a, tc) }
+
+single_param_normal[arg_ty]:
+    | a=single_param tc=TYPE_COMMENT? &'=>' { _PyPegen_add_type_comment_to_arg(p, a, tc) }
+
+single_param[arg_ty]: a=NAME { _PyAST_arg(a->v.Name.id, NULL, NULL, EXTRA) }
 
 # LITERALS
 # ========

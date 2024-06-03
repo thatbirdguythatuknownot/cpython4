@@ -2,6 +2,8 @@
 #  error "this header file must not be included directly"
 #endif
 
+#define PY_MAX_TEMPLATE_SUBS 200
+
 /* Public interface */
 #define PyCF_MASK (CO_FUTURE_DIVISION | CO_FUTURE_ABSOLUTE_IMPORT | \
                    CO_FUTURE_WITH_STATEMENT | CO_FUTURE_PRINT_FUNCTION | \
@@ -23,6 +25,8 @@
 #define PyCF_COMPILE_MASK (PyCF_ONLY_AST | PyCF_ALLOW_TOP_LEVEL_AWAIT | \
                            PyCF_TYPE_COMMENTS | PyCF_DONT_IMPLY_DEDENT | \
                            PyCF_ALLOW_INCOMPLETE_INPUT | PyCF_OPTIMIZED_AST)
+
+
 
 typedef struct {
     int cf_flags;  /* bitmask of CO_xxx flags relevant to future */

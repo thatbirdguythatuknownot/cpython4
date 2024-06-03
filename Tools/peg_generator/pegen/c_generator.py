@@ -370,7 +370,7 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self, exact_tokens, non_exact_tokens
         )
         self._varname_counter = 0
-        self._template_sub_depth = 0
+        self._subn_incs: List[bool] = []
         self._error_return = "NULL"
         self.debug = debug
         self.skip_actions = skip_actions
@@ -397,8 +397,11 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
         for stmt in self.cleanup_statements:
             self.print(stmt)
         self.remove_level()
-        if self._template_sub_depth > 0:
-            self.print("p->subn--;")
+        if self._subn_incs and self._subn_incs[-1]:
+            if ret_val == self._error_return:
+                self.print(f"_PyPegen_dec_subn(p, 0);")
+            else:
+                self.print(f"_PyPegen_dec_subn(p, !p->error_indicator && _res != {self._error_return});");
         self.print(f"return {ret_val};")
 
     def unique_varname(self, name: str = "tmpvar") -> str:
@@ -555,6 +558,7 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
     def _set_up_rule_memoization(self, node: Rule, result_type: str) -> None:
         self.print("{")
         with self.indent():
+            self._subn_incs.append(False)
             self.add_level()
             self.print(f"{result_type} _res = {self._error_return};")
             self.print(f"if (_PyPegen_is_memoized(p, {node.name}_type, &_res)) {{")
@@ -582,6 +586,7 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.print("}")
             self.print(f"p->mark = _resmark;")
             self.add_return("_res")
+            assert self._subn_incs.pop() is False, "subn mismatch"
         self.print("}")
         self.print(f"static {result_type}")
         self.print(f"{node.name}_raw(Parser *p)")
@@ -595,15 +600,18 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
         with self.indent(), self.change_error_return("-1" if node.type == "int" else "NULL"):
             self.add_level()
             self._check_for_errors()
-            if template_sub := "$" in node.flags:
-                self._template_sub_depth += 1
-                self.print("p->subn++;")
             self.print(f"{result_type} _res = {self._error_return};")
             if memoize:
                 self.print(f"if (_PyPegen_is_memoized(p, {node.name}_type, &_res)) {{")
                 with self.indent():
                     self.add_return("_res")
                 self.print("}")
+            if template_sub := "$" in node.flags:
+                self.print("if (!_PyPegen_inc_subn(p)) {")
+                with self.indent():
+                    self.add_return(self._error_return)
+                self.print("}")
+            self._subn_incs.append(template_sub)
             self.print("int _mark = p->mark;")
             if any(alt.action and "EXTRA" in alt.action for alt in rhs.alts):
                 self._set_up_token_start_metadata_extraction()
@@ -618,12 +626,10 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.print(f"_res = {self._error_return};")
         self.print("  done:")
         with self.indent():
-            if template_sub:
-                self._template_sub_depth -= 1
-                self.print("p->subn--;")
             if memoize:
                 self.print(f"_PyPegen_insert_memo(p, _mark, {node.name}_type, _res);")
             self.add_return("_res")
+        assert self._subn_incs.pop() is template_sub, "subn mismatch"
 
     def _handle_loop_rule_body(self, node: Rule, rhs: Rhs) -> None:
         memoize = self._should_memoize(node)
@@ -632,15 +638,18 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
         with self.indent():
             self.add_level()
             self._check_for_errors()
-            if template_sub := "$" in node.flags:
-                self._template_sub_depth += 1
-                self.print("p->subn++;")
             self.print("void *_res = NULL;")
             if memoize:
                 self.print(f"if (_PyPegen_is_memoized(p, {node.name}_type, &_res)) {{")
                 with self.indent():
                     self.add_return("_res")
                 self.print("}")
+            if template_sub := "$" in node.flags:
+                self.print("if (!_PyPegen_inc_subn(p)) {")
+                with self.indent():
+                    self.add_return(self._error_return)
+                self.print("}")
+            self._subn_incs.append(template_sub)
             self.print("int _mark = p->mark;")
             if memoize:
                 self.print("int _start_mark = p->mark;")
@@ -666,12 +675,10 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.out_of_memory_return(f"!_seq", cleanup_code="PyMem_Free(_children);")
             self.print("for (int i = 0; i < _n; i++) asdl_seq_SET_UNTYPED(_seq, i, _children[i]);")
             self.print("PyMem_Free(_children);")
-            if template_sub:
-                self._template_sub_depth -= 1
-                self.print("p->subn--;")
             if memoize and node.name:
                 self.print(f"_PyPegen_insert_memo(p, _start_mark, {node.name}_type, _seq);")
             self.add_return("_seq")
+            assert self._subn_incs.pop() is template_sub, "subn mismatch"
 
     def visit_Rule(self, node: Rule) -> None:
         is_loop = node.is_loop()
@@ -728,9 +735,7 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.visit(alt, is_loop=is_loop, is_gather=is_gather, rulename=rulename)
 
     def visit_TemplateGroup(self, node: TemplateGroup) -> None:
-        self._template_sub_depth += 1
-        temp_var = f"_templateuse_{self._template_sub_depth}"
-        self.print(f"(p->subn++, {temp_var} = ")
+        self.print(f"_PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (")
         with self.indent():
             if len(node.items) == 1:
                 item = node.items[0]
@@ -744,8 +749,7 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
                     else:
                         self.print("&&")
                     self.visit(item)
-            self.print(f", p->subn--, {temp_var})")
-        self._template_sub_depth -= 1
+        self.print("))")
 
     def join_conditions(self, keyword: str, node: Any) -> None:
         self.print(f"{keyword} (")
@@ -864,8 +868,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.print(f"{{ // {node}")
         with self.indent():
             self._check_for_errors()
-            if is_tmpl_grp := len(node.items) == 1 and isinstance(node.items[0], TemplateGroup):
-                self._template_sub_depth += 1
             node_str = str(node).replace('"', '\\"')
             self.print(
                 f'D(fprintf(stderr, "%*c> {rulename}[%d-%d L%d]: %s\\n", p->level, \' \', _mark, p->mark, p->tok->lineno, "{node_str}"));'
@@ -877,8 +879,8 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
                     var_type = "void *"
                 else:
                     var_type += " "
-                if v == "_cut_var":
-                    v += " = 0"  # cut_var must be initialized
+                if v == "_cut_var" or v.startswith("_templateuse_"):
+                    v += " = 0"  # cut_var and _templateuse_* must be initialized
                 self.print(f"{var_type}{v};")
                 if v and v.startswith("_opt_var"):
                     self.print(f"UNUSED({v}); // Silence compiler warnings")
@@ -895,8 +897,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
                 f"D(fprintf(stderr, \"%*c%s {rulename}[%d-%d L%d]: %s failed!\\n\", p->level, ' ',\n"
                 f'                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "{node_str}"));'
             )
-            if is_tmpl_grp:
-                self._template_sub_depth -= 1
             if "_cut_var" in vars:
                 self.print("if (_cut_var) {")
                 with self.indent():
@@ -907,15 +907,12 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
     def collect_template_vars(
         self, node: TemplateGroup, types: Dict[Optional[str], Optional[str]]
     ) -> None:
-        self._template_sub_depth += 1
-        types[f"_templateuse_{self._template_sub_depth}"] = "int"
         for item in node.items:
             if isinstance(item, TemplateGroup):
                 self.collect_template_vars(item, types)
             else:
                 name, type = self.add_var(item)
                 types[name] = type
-        self._template_sub_depth -= 1
 
     def collect_vars(self, node: Alt) -> Dict[Optional[str], Optional[str]]:
         types = {}

@@ -798,7 +798,9 @@ _PyPegen_Parser_New(struct tok_state *tok, int start_rule, int flags,
     p->feature_version = feature_version;
     p->known_err_token = NULL;
     p->level = 0;
+    memset(p->template_subs, 0, PY_MAX_TEMPLATE_SUBS * sizeof(expr_ty));
     p->subn = 0;
+    p->max_subn = 0;
     p->call_invalid_rules = 0;
     if (restrici == NULL) {
         restrici = PyMem_Calloc(1, sizeof(int));
@@ -892,6 +894,15 @@ _PyPegen_run_parser(Parser *p)
         return RAISE_SYNTAX_ERROR("multiple statements found while compiling a single statement");
     }
 
+    Py_ssize_t i;
+    for (i = 0; i < p->max_subn; i++) {
+        expr_ty last = p->template_subs[i];
+        if (last) {
+            assert(last->kind == Template_kind);
+            last->v.Template.last = 1;
+        }
+    }
+
     // test_peg_generator defines _Py_TEST_PEGEN to not call PyAST_Validate()
 #if defined(Py_DEBUG) && !defined(_Py_TEST_PEGEN)
     if (p->start_rule == Py_single_input ||
@@ -903,6 +914,7 @@ _PyPegen_run_parser(Parser *p)
         }
     }
 #endif
+
     return res;
 }
 

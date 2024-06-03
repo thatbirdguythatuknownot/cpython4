@@ -14,19 +14,16 @@ typedef struct {
 } _comp_entry;
 
 typedef struct {
-    _comp_entry *arr;
-    Py_ssize_t capacity;
-    Py_ssize_t n;
-} _comp_list;
-
-typedef struct {
     int optimize;
     int ff_features;
 
     int recursion_depth;            /* current recursion depth */
     int recursion_limit;            /* recursion limit */
 
-    _comp_list *comp_ptr;
+    struct {
+        _comp_entry arr[PY_MAX_TEMPLATE_SUBS];
+        int n;
+    } comp_ptr;
 } _PyASTOptimizeState;
 
 
@@ -771,20 +768,11 @@ static int astfold_type_param(type_param_ty node_, PyArena *ctx_, _PyASTOptimize
 }
 
 static inline _comp_entry *
-add_comp_entry(_comp_list *ptr, expr_ty sub)
+add_comp_entry(_PyASTOptimizeState *state, expr_ty sub)
 {
-    assert(ptr && ptr->arr);
-    if (ptr->n == ptr->capacity) {
-        _comp_entry *new_arr = PyMem_Realloc(ptr->arr, 2 * ptr->capacity);
-        if (new_arr == NULL) {
-            PyErr_NoMemory();
-            return NULL;
-        }
-        ptr->arr = new_arr;
-        ptr->capacity *= 2;
-    }
+    assert(0 <= state->comp_ptr.n && state->comp_ptr.n < PY_MAX_TEMPLATE_SUBS);
 
-    _comp_entry *entry = &ptr->arr[ptr->n++];
+    _comp_entry *entry = &state->comp_ptr.arr[state->comp_ptr.n++];
     entry->sub = sub;
     entry->last = NULL;
     return entry;
@@ -806,10 +794,7 @@ fold_comp(expr_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
         constant = 0;
     }
 
-    _comp_entry *entry = add_comp_entry(state->comp_ptr, constant ? arg : NULL);
-    if (entry == NULL) {
-        return 0;
-    }
+    _comp_entry *entry = add_comp_entry(state, constant ? arg : NULL);
 
     func = node->v.Composition.func;
     CALL(astfold_expr, expr_ty, func);
@@ -835,12 +820,11 @@ fold_comp(expr_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
             CALL(astfold_expr, expr_ty, node); /* second pass */
         }
         else {
-            entry->last->v.Template.last = 1;
             node->v.Composition.has_templates = 1;
         }
     }
 
-    state->comp_ptr->n--;
+    state->comp_ptr.n--;
     return 1;
 }
 
@@ -850,21 +834,15 @@ fold_compassign(stmt_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
     assert(node->kind == AugAssign_kind);
     assert(node->v.AugAssign.value);
 
-    _comp_entry *entry = add_comp_entry(state->comp_ptr, NULL);
-    if (entry == NULL) {
-        return 0;
-    }
+    _comp_entry *entry = add_comp_entry(state, NULL);
 
     CALL(astfold_expr, expr_ty, node->v.AugAssign.value);
 
     if (!entry->last) {
         node->v.AugAssign.op = CompCall;
     }
-    else {
-        entry->last->v.Template.last = 1;
-    }
 
-    state->comp_ptr->n--;
+    state->comp_ptr.n--;
     return 1;
 }
 
@@ -953,41 +931,29 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL_SEQ(astfold_expr, expr, node_->v.Set.elts);
         break;
     case ListComp_kind:
-        entry = add_comp_entry(state->comp_ptr, NULL);
-        if (entry == NULL) {
-            return 0;
-        }
+        entry = add_comp_entry(state, NULL);
         CALL(astfold_expr, expr_ty, node_->v.ListComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.ListComp.generators);
-        state->comp_ptr->n--;
+        state->comp_ptr.n--;
         break;
     case TupleComp_kind:
-        entry = add_comp_entry(state->comp_ptr, NULL);
-        if (entry == NULL) {
-            return 0;
-        }
+        entry = add_comp_entry(state, NULL);
         CALL(astfold_expr, expr_ty, node_->v.TupleComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.TupleComp.generators);
-        state->comp_ptr->n--;
+        state->comp_ptr.n--;
         break;
     case SetComp_kind:
-        entry = add_comp_entry(state->comp_ptr, NULL);
-        if (entry == NULL) {
-            return 0;
-        }
+        entry = add_comp_entry(state, NULL);
         CALL(astfold_expr, expr_ty, node_->v.SetComp.elt);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.SetComp.generators);
-        state->comp_ptr->n--;
+        state->comp_ptr.n--;
         break;
     case DictComp_kind:
-        entry = add_comp_entry(state->comp_ptr, NULL);
-        if (entry == NULL) {
-            return 0;
-        }
+        entry = add_comp_entry(state, NULL);
         CALL_OPT(astfold_expr, expr_ty, node_->v.DictComp.key);
         CALL(astfold_expr, expr_ty, node_->v.DictComp.value);
         CALL_SEQ(astfold_comprehension, comprehension, node_->v.DictComp.generators);
-        state->comp_ptr->n--;
+        state->comp_ptr.n--;
         break;
     case GeneratorExp_kind:
         CALL(astfold_expr, expr_ty, node_->v.GeneratorExp.elt);
@@ -1078,12 +1044,13 @@ astfold_expr(expr_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         break;
     case ExprTarget_kind:
         CALL(astfold_expr, expr_ty, node_->v.ExprTarget.value);
+        break;
     case Template_kind:
     {
-        assert(node_->v.Template.level < state->comp_ptr->n);
+        assert(0 <= node_->v.Template.level && node_->v.Template.level < state->comp_ptr.n);
 
         _comp_entry *entry =
-            &state->comp_ptr->arr[state->comp_ptr->n - node_->v.Template.level - 1];
+            &state->comp_ptr.arr[state->comp_ptr.n - node_->v.Template.level - 1];
         if (entry->sub) {
             COPY_NODE(node_, entry->sub);
         }
@@ -1449,9 +1416,7 @@ _PyAST_Optimize(mod_ty mod, PyArena *arena, int optimize, int ff_features)
     starting_recursion_depth = recursion_depth * COMPILER_STACK_FRAME_SCALE;
     state.recursion_depth = starting_recursion_depth;
     state.recursion_limit = C_RECURSION_LIMIT * COMPILER_STACK_FRAME_SCALE;
-    state.comp_ptr = (_comp_list *)PyMem_Malloc(sizeof(_comp_list));    if (state.comp_ptr == NULL) {
-        PyErr_NoMemory();        return 0;    }    state.comp_ptr->arr = (_comp_entry *)PyMem_Malloc(2 * sizeof(_comp_entry));    if (state.comp_ptr->arr == NULL) {
-        PyErr_NoMemory();        return 0;    }    state.comp_ptr->capacity = 2;    state.comp_ptr->n = 0;
+    state.comp_ptr.n = 0;
 
     int ret = astfold_mod(mod, arena, &state);
     assert(ret || PyErr_Occurred());
@@ -1464,9 +1429,7 @@ _PyAST_Optimize(mod_ty mod, PyArena *arena, int optimize, int ff_features)
         return 0;
     }
 
-    assert(state.comp_ptr->n == 0);
-    PyMem_Free(state.comp_ptr->arr);
-    PyMem_Free(state.comp_ptr);
+    assert(state.comp_ptr.n == 0);
 
     return ret;
 }

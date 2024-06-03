@@ -12,6 +12,8 @@
 struct validator {
     int recursion_depth;            /* current recursion depth */
     int recursion_limit;            /* recursion limit */
+
+    int templatesub_depth;          /* current depth for template substitution */
 };
 
 static int validate_stmts(struct validator *, asdl_stmt_seq *);
@@ -304,20 +306,24 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
     case Set_kind:
         ret = validate_exprs(state, exp->v.Set.elts, Load, 0);
         break;
-#define COMP(NAME) \
+#define COMP(NAME, DO_TEMPLATE) \
         case NAME ## _kind: \
+            if (DO_TEMPLATE) state->templatesub_depth++; \
             ret = validate_comprehension(state, exp->v.NAME.generators) && \
                 validate_expr(state, exp->v.NAME.elt, Load); \
+            if (DO_TEMPLATE) state->templatesub_depth--; \
             break;
-    COMP(ListComp)
-    COMP(TupleComp)
-    COMP(SetComp)
-    COMP(GeneratorExp)
+    COMP(ListComp, 1)
+    COMP(TupleComp, 1)
+    COMP(SetComp, 1)
+    COMP(GeneratorExp, 0)
 #undef COMP
     case DictComp_kind:
+        state->templatesub_depth++;
         ret = validate_comprehension(state, exp->v.DictComp.generators) &&
             (!exp->v.DictComp.key || validate_expr(state, exp->v.DictComp.key, Load)) &&
             validate_expr(state, exp->v.DictComp.value, Load);
+        state->templatesub_depth--;
         break;
     case Yield_kind:
         ret = !exp->v.Yield.value || validate_expr(state, exp->v.Yield.value, Load);
@@ -390,8 +396,13 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
         ret = validate_expr(state, exp->v.NamedExpr.value, Load);
         break;
     case Composition_kind:
-        ret = validate_expr(state, exp->v.Composition.arg, Load) &&
-            validate_expr(state, exp->v.Composition.func, Load);
+        ret = validate_expr(state, exp->v.Composition.arg, Load);
+
+        if (ret) {
+            state->templatesub_depth++;
+            ret = validate_expr(state, exp->v.Composition.func, Load);
+            state->templatesub_depth--;
+        }
         break;
     case CompoundExpr_kind:
         ret = validate_stmt(state, exp->v.CompoundExpr.value);
@@ -402,8 +413,15 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
     case ExprTarget_kind:
         ret = validate_expr(state, exp->v.ExprTarget.value, Load);
         break;
-    /* This last case doesn't have any checking. */
     case Template_kind:
+        if (exp->v.Template.level >= state->templatesub_depth) {
+            PyErr_SetString(PyExc_SyntaxError,
+                            "template index out of range");
+            return 0;
+        }
+        ret = 1;
+        break;
+    /* This last case doesn't have any checking. */
     case Name_kind:
         ret = 1;
         break;
@@ -1089,6 +1107,7 @@ _PyAST_Validate(mod_ty mod)
     starting_recursion_depth = recursion_depth * COMPILER_STACK_FRAME_SCALE;
     state.recursion_depth = starting_recursion_depth;
     state.recursion_limit = C_RECURSION_LIMIT * COMPILER_STACK_FRAME_SCALE;
+    state.templatesub_depth = 0;
 
     switch (mod->kind) {
     case Module_kind:
@@ -1111,6 +1130,8 @@ _PyAST_Validate(mod_ty mod)
         PyErr_SetString(PyExc_SystemError, "impossible module node");
         return 0;
     }
+
+    assert(state.templatesub_depth == 0);
 
     /* Check that the recursion depth counting balanced correctly */
     if (res && state.recursion_depth != starting_recursion_depth) {

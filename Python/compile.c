@@ -6924,6 +6924,9 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
                 c, s, s->kind == AsyncFunctionDef_kind, 1);
         case ClassDef_kind:
             return compiler_class(c, s, 1);
+        case Expr_kind:
+            assert(s->v.Expr.value->kind == BlockExpr_kind);
+            return compiler_blockexpr(c, s->v.Expr.value);
         default:
             return compiler_error(c, loc,
                 "invalid compound expression");

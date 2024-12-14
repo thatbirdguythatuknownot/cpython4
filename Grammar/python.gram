@@ -138,7 +138,7 @@ simple_stmt[stmt_ty] (memo):
     | &'goto' goto_stmt
 
 compound_stmt[stmt_ty]:
-    | &("def" | '@' | 'async') function_def
+    | &('def' | '@' | 'async') function_def
     | &'if' if_stmt
     | &':' unless_stmt
     | &('class' | '@') class_def
@@ -394,13 +394,13 @@ function_def[stmt_ty]:
 
 function_def_raw[stmt_ty]:
     | invalid_def_raw
-    | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+    | 'def' n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
         _PyPegen_check_braces(p) ?
         _PyAST_FunctionDef(n->v.Name.id,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                         b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         : NULL }
-    | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+    | 'async' 'def' n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
         _PyPegen_check_braces(p) ?
         CHECK_VERSION(
             stmt_ty,
@@ -410,11 +410,11 @@ function_def_raw[stmt_ty]:
                             (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                             b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         ) : NULL }
-    | "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
+    | 'def' n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
         _PyAST_FunctionDef(n->v.Name.id,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                         b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
-    | 'async' "def" n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
+    | 'async' 'def' n=NAME t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block {
         CHECK_VERSION(
             stmt_ty,
             5,
@@ -429,13 +429,13 @@ function_def_nonewline[stmt_ty]:
     | function_def_raw_nonewline
 
 function_def_raw_nonewline[stmt_ty]:
-    | "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+    | 'def' n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
         _PyPegen_check_braces(p) ?
         _PyAST_FunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                         b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         : NULL }
-    | 'async' "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
+    | 'async' 'def' n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] '{' tc=[func_type_comment] b=block_nonewline '}' {
         _PyPegen_check_braces(p) ?
         CHECK_VERSION(
             stmt_ty,
@@ -445,11 +445,11 @@ function_def_raw_nonewline[stmt_ty]:
                             (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                             b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         ) : NULL }
-    | "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+    | 'def' n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
         _PyAST_FunctionDef(n ? ((expr_ty)n)->v.Name.id : NULL,
                         (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                         b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA) }
-    | 'async' "def" n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
+    | 'async' 'def' n=[NAME] t=[type_params] &&'(' params=[params] ')' a=['->' z=expression { z }] &&':' tc=[func_type_comment] b=block_nonewline {
         CHECK_VERSION(
             stmt_ty,
             5,
@@ -1262,21 +1262,21 @@ group[expr_ty]:
     | invalid_group
 
 compound_expr[expr_ty]:
-    | '(' a=( &("def" | '@' | 'async') function_def_nonewline
+    | '(' a=( &('def' | '@' | 'async') function_def_nonewline
             | &('class' | '@') class_def_nonewline
-            | &"block" block_expr_nonewline) ')' { _PyAST_CompoundExpr(a, EXTRA) }
+            | &"block" a=block_expr_nonewline { _PyAST_Expr(a, EXTRA) }) ')' { _PyAST_CompoundExpr(a, EXTRA) }
 
 # Lambda functions
 # ----------------
 
 lambdef[expr_ty]:
-    | 'lambda' a=[lambda_params] ':' b=expression {
+    | 'lambda' a=[lambda_params] ':' b=(expression | braced_block) {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | '|' a=[lambda_sum_params] '|' b=expression {
+    | '|' a=[lambda_sum_params] '|' b=(expression | braced_block) {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | '(' a=[params] ')' '=>' b=expression {
+    | '(' a=[params] ')' '=>' b=(expression | braced_block) {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | a=single_params? '=>' b=expression {
+    | a=single_params? '=>' b=(expression | braced_block) {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
 
 lambda_params[arguments_ty]:
@@ -1947,7 +1947,7 @@ invalid_for_stmt:
     | ['async'] a='for' star_targets 'in' star_expressions ':' NEWLINE !INDENT {
         RAISE_INDENTATION_ERROR("expected an indented block after 'for' statement on line %d", a->lineno) }
 invalid_def_raw:
-    | ['async'] a="def" NAME '(' [params] ')' ['->' expression] ':' NEWLINE !INDENT {
+    | ['async'] a='def' NAME '(' [params] ')' ['->' expression] ':' NEWLINE !INDENT {
         RAISE_INDENTATION_ERROR("expected an indented block after function definition on line %d", a->lineno) }
 invalid_class_def_raw_nonewline:
     | 'class' NAME ['(' [arguments] ')'] NEWLINE { RAISE_SYNTAX_ERROR("expected ':'") }

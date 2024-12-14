@@ -283,7 +283,6 @@ class StructVisitor(EmitVisitor):
 
         emit("struct _%(name)s {")
         emit("enum _%(name)s_kind kind;", depth + 1)
-        emit("int has_template;", depth + 1)
         emit("union {", depth + 1)
         for t in sum.types:
             self.visit(t, depth + 2)

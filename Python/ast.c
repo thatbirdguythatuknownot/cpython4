@@ -13,7 +13,7 @@ struct validator {
     int recursion_depth;            /* current recursion depth */
     int recursion_limit;            /* recursion limit */
 
-    int templatesub_depth;
+    int templatesub_depth;          /* current depth for template substitution */
 };
 
 static int validate_stmts(struct validator *, asdl_stmt_seq *);
@@ -25,6 +25,7 @@ static int validate_stmt(struct validator *, stmt_ty);
 static int validate_expr(struct validator *, expr_ty, expr_context_ty);
 static int validate_pattern(struct validator *, pattern_ty, int);
 static int validate_typeparam(struct validator *, type_param_ty);
+static int validate_body(struct validator *, asdl_stmt_seq *, const char *);
 
 #define VALIDATE_POSITIONS(node) \
     if (node->lineno > node->end_lineno) { \
@@ -408,7 +409,7 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
         ret = validate_stmt(state, exp->v.CompoundExpr.value);
         break;
     case BlockExpr_kind:
-        ret = validate_stmts(state, exp->v.BlockExpr.body);
+        ret = validate_body(state, exp->v.BlockExpr.body, "BlockExpr");
         break;
     case ExprTarget_kind:
         ret = validate_expr(state, exp->v.ExprTarget.value, Load);

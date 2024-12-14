@@ -173,7 +173,6 @@ enum _mod_kind {Module_kind=1, Interactive_kind=2, Expression_kind=3,
                  FunctionType_kind=4};
 struct _mod {
     enum _mod_kind kind;
-    int has_template;
     union {
         struct {
             asdl_stmt_seq *body;
@@ -208,7 +207,6 @@ enum _stmt_kind {FunctionDef_kind=1, AsyncFunctionDef_kind=2, ClassDef_kind=3,
                   Continue_kind=31};
 struct _stmt {
     enum _stmt_kind kind;
-    int has_template;
     union {
         struct {
             identifier name;
@@ -395,7 +393,6 @@ enum _expr_kind {BoolOp_kind=1, NamedExpr_kind=2, BinOp_kind=3, UnaryOp_kind=4,
                   Name_kind=30, List_kind=31, Tuple_kind=32, Slice_kind=33};
 struct _expr {
     enum _expr_kind kind;
-    int has_template;
     union {
         struct {
             boolop_ty op;
@@ -585,7 +582,6 @@ struct _comprehension {
 enum _excepthandler_kind {ExceptHandler_kind=1};
 struct _excepthandler {
     enum _excepthandler_kind kind;
-    int has_template;
     union {
         struct {
             expr_ty type;
@@ -660,7 +656,6 @@ enum _pattern_kind {MatchValue_kind=1, MatchSingleton_kind=2,
                      MatchOr_kind=8};
 struct _pattern {
     enum _pattern_kind kind;
-    int has_template;
     union {
         struct {
             expr_ty value;
@@ -710,7 +705,6 @@ struct _pattern {
 enum _type_ignore_kind {TypeIgnore_kind=1};
 struct _type_ignore {
     enum _type_ignore_kind kind;
-    int has_template;
     union {
         struct {
             int lineno;
@@ -723,7 +717,6 @@ struct _type_ignore {
 enum _type_param_kind {TypeVar_kind=1, ParamSpec_kind=2, TypeVarTuple_kind=3};
 struct _type_param {
     enum _type_param_kind kind;
-    int has_template;
     union {
         struct {
             identifier name;

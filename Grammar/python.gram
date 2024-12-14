@@ -1270,14 +1270,45 @@ compound_expr[expr_ty]:
 # ----------------
 
 lambdef[expr_ty]:
-    | 'lambda' a=[lambda_params] ':' b=(expression | braced_block) {
+    | 'lambda' a=[lambda_params] ':' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | '|' a=[lambda_sum_params] '|' b=(expression | braced_block) {
+    | '|' a=[lambda_sum_params] '|' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | '(' a=[params] ')' '=>' b=(expression | braced_block) {
+    | '(' a=[params] ')' '=>' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
-    | a=single_params? '=>' b=(expression | braced_block) {
+    | a=single_params? '=>' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+    | lambdef_braced
+
+lambdef_braced[expr_ty]:
+    | 'lambda' a=[lambda_params] ':' b=braced_block { _PyAST_CompoundExpr(
+        _PyAST_FunctionDef(
+            NULL,
+            (a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+            b, NULL, NULL, NULL, NULL,
+            EXTRA
+        ), EXTRA) }
+    | '|' a=[lambda_sum_params] '|' b=braced_block { _PyAST_CompoundExpr(
+        _PyAST_FunctionDef(
+            NULL,
+            (a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+            b, NULL, NULL, NULL, NULL,
+            EXTRA
+        ), EXTRA) }
+    | '(' a=[params] ')' '=>' b=braced_block { _PyAST_CompoundExpr(
+        _PyAST_FunctionDef(
+            NULL,
+            (a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+            b, NULL, NULL, NULL, NULL,
+            EXTRA
+        ), EXTRA) }
+    | a=single_params? '=>' b=braced_block { _PyAST_CompoundExpr(
+        _PyAST_FunctionDef(
+            NULL,
+            (a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+            b, NULL, NULL, NULL, NULL,
+            EXTRA
+        ), EXTRA) }
 
 lambda_params[arguments_ty]:
     | invalid_lambda_parameters

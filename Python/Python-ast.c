@@ -599,6 +599,7 @@ static const char * const Composition_fields[]={
     "arg",
     "func",
     "has_templates",
+    "aware",
 };
 static const char * const Lambda_fields[]={
     "args",
@@ -1444,7 +1445,7 @@ init_types(struct ast_state *state)
         "     | NamedExpr(expr target, expr value)\n"
         "     | BinOp(expr left, operator op, expr right)\n"
         "     | UnaryOp(unaryop op, expr operand)\n"
-        "     | Composition(expr arg, expr func, int has_templates)\n"
+        "     | Composition(expr arg, expr func, int has_templates, int aware)\n"
         "     | Lambda(arguments args, expr body)\n"
         "     | IfExp(expr test, expr body, expr orelse)\n"
         "     | Dict(expr* keys, expr* values)\n"
@@ -1497,8 +1498,8 @@ init_types(struct ast_state *state)
         "UnaryOp(unaryop op, expr operand)");
     if (!state->UnaryOp_type) return 0;
     state->Composition_type = make_type(state, "Composition", state->expr_type,
-                                        Composition_fields, 3,
-        "Composition(expr arg, expr func, int has_templates)");
+                                        Composition_fields, 4,
+        "Composition(expr arg, expr func, int has_templates, int aware)");
     if (!state->Composition_type) return 0;
     state->Lambda_type = make_type(state, "Lambda", state->expr_type,
                                    Lambda_fields, 2,
@@ -3007,9 +3008,9 @@ _PyAST_UnaryOp(unaryop_ty op, expr_ty operand, int lineno, int col_offset, int
 }
 
 expr_ty
-_PyAST_Composition(expr_ty arg, expr_ty func, int has_templates, int lineno,
-                   int col_offset, int end_lineno, int end_col_offset, PyArena
-                   *arena)
+_PyAST_Composition(expr_ty arg, expr_ty func, int has_templates, int aware, int
+                   lineno, int col_offset, int end_lineno, int end_col_offset,
+                   PyArena *arena)
 {
     expr_ty p;
     if (!arg) {
@@ -3029,6 +3030,7 @@ _PyAST_Composition(expr_ty arg, expr_ty func, int has_templates, int lineno,
     p->v.Composition.arg = arg;
     p->v.Composition.func = func;
     p->v.Composition.has_templates = has_templates;
+    p->v.Composition.aware = aware;
     p->lineno = lineno;
     p->col_offset = col_offset;
     p->end_lineno = end_lineno;
@@ -4942,6 +4944,11 @@ ast2obj_expr(struct ast_state *state, void* _o)
         value = ast2obj_int(state, o->v.Composition.has_templates);
         if (!value) goto failed;
         if (PyObject_SetAttr(result, state->has_templates, value) == -1)
+            goto failed;
+        Py_DECREF(value);
+        value = ast2obj_int(state, o->v.Composition.aware);
+        if (!value) goto failed;
+        if (PyObject_SetAttr(result, state->aware, value) == -1)
             goto failed;
         Py_DECREF(value);
         break;
@@ -9645,6 +9652,7 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
         expr_ty arg;
         expr_ty func;
         int has_templates;
+        int aware;
 
         if (PyObject_GetOptionalAttr(obj, state->arg, &tmp) < 0) {
             return 1;
@@ -9697,8 +9705,26 @@ obj2ast_expr(struct ast_state *state, PyObject* obj, expr_ty* out, PyArena*
             if (res != 0) goto failed;
             Py_CLEAR(tmp);
         }
-        *out = _PyAST_Composition(arg, func, has_templates, lineno, col_offset,
-                                  end_lineno, end_col_offset, arena);
+        if (PyObject_GetOptionalAttr(obj, state->aware, &tmp) < 0) {
+            return 1;
+        }
+        if (tmp == NULL) {
+            PyErr_SetString(PyExc_TypeError, "required field \"aware\" missing from Composition");
+            return 1;
+        }
+        else {
+            int res;
+            if (_Py_EnterRecursiveCall(" while traversing 'Composition' node")) {
+                goto failed;
+            }
+            res = obj2ast_int(state, tmp, &aware, arena);
+            _Py_LeaveRecursiveCall();
+            if (res != 0) goto failed;
+            Py_CLEAR(tmp);
+        }
+        *out = _PyAST_Composition(arg, func, has_templates, aware, lineno,
+                                  col_offset, end_lineno, end_col_offset,
+                                  arena);
         if (*out == NULL) goto failed;
         return 0;
     }

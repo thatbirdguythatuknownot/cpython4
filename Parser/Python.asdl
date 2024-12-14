@@ -64,7 +64,7 @@ module Python
          | NamedExpr(expr target, expr value)
          | BinOp(expr left, operator op, expr right)
          | UnaryOp(unaryop op, expr operand)
-         | Composition(expr arg, expr func, int has_templates)
+         | Composition(expr arg, expr func, int has_templates, int aware)
          | Lambda(arguments args, expr body)
          | IfExp(expr test, expr body, expr orelse)
          | Dict(expr* keys, expr* values)

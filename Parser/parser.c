@@ -3445,8 +3445,6 @@ compound_stmt_nonewline_rule(Parser *p)
 //     | NAME ':' expression ['=' top_rhs]
 //     | ('(' single_target ')' | single_subscript_attribute_target) ':' expression ['=' top_rhs]
 //     | ((star_targets '='))+ top_rhs !'=' TYPE_COMMENT?
-//     | single_target '|>=' ~ top_rhs
-//     | aug_target '|>=' ~ top_rhs
 //     | single_target unarassign &(';' | NEWLINE)
 //     | aug_target unarassign &(';' | NEWLINE)
 //     | single_target augassign ~ top_rhs
@@ -3598,104 +3596,6 @@ assignment_rule(Parser *p)
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s assignment[%d-%d L%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "((star_targets '='))+ top_rhs !'=' TYPE_COMMENT?"));
-    }
-    { // single_target '|>=' ~ top_rhs
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ top_rhs"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = single_target_rule(p))  // single_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = top_rhs_rule(p))  // top_rhs
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ top_rhs"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ top_rhs"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
-    }
-    { // aug_target '|>=' ~ top_rhs
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ top_rhs"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = aug_target_rule(p))  // aug_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = top_rhs_rule(p))  // top_rhs
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ top_rhs"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ top_rhs"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
     }
     { // single_target unarassign &(';' | NEWLINE)
         if (p->error_indicator) {
@@ -5960,8 +5860,6 @@ dotted_name_raw(Parser *p)
 //     | NAME ':' expression ['=' block_expr]
 //     | ('(' single_target ')' | single_subscript_attribute_target) ':' expression ['=' block_expr]
 //     | ((star_targets '='))+ block_expr !'=' TYPE_COMMENT?
-//     | single_target '|>=' ~ block_expr
-//     | aug_target '|>=' ~ block_expr
 //     | single_target augassign block_expr
 //     | aug_target augassign block_expr
 static stmt_ty
@@ -6111,104 +6009,6 @@ assignment_block_rule(Parser *p)
         D(fprintf(stderr, "%*c%s assignment_block[%d-%d L%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "((star_targets '='))+ block_expr !'=' TYPE_COMMENT?"));
     }
-    { // single_target '|>=' ~ block_expr
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment_block[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = single_target_rule(p))  // single_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = block_expr_rule(p))  // block_expr
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment_block[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment_block[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
-    }
-    { // aug_target '|>=' ~ block_expr
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment_block[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = aug_target_rule(p))  // aug_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = block_expr_rule(p))  // block_expr
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment_block[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment_block[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
-    }
     { // single_target augassign block_expr
         if (p->error_indicator) {
             p->level--;
@@ -6297,8 +6097,6 @@ assignment_block_rule(Parser *p)
 //     | NAME ':' expression ['=' block_expr_nonewline]
 //     | ('(' single_target ')' | single_subscript_attribute_target) ':' expression ['=' block_expr_nonewline]
 //     | ((star_targets '='))+ block_expr_nonewline !'=' TYPE_COMMENT?
-//     | single_target '|>=' ~ block_expr_nonewline
-//     | aug_target '|>=' ~ block_expr_nonewline
 //     | single_target augassign block_expr_nonewline
 //     | aug_target augassign block_expr_nonewline
 static stmt_ty
@@ -6447,104 +6245,6 @@ assignment_block_nonewline_rule(Parser *p)
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s assignment_block_nonewline[%d-%d L%d]: %s failed!\n", p->level, ' ',
                   p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "((star_targets '='))+ block_expr_nonewline !'=' TYPE_COMMENT?"));
-    }
-    { // single_target '|>=' ~ block_expr_nonewline
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment_block_nonewline[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr_nonewline"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = single_target_rule(p))  // single_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = block_expr_nonewline_rule(p))  // block_expr_nonewline
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment_block_nonewline[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr_nonewline"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment_block_nonewline[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "single_target '|>=' ~ block_expr_nonewline"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
-    }
-    { // aug_target '|>=' ~ block_expr_nonewline
-        if (p->error_indicator) {
-            p->level--;
-            return NULL;
-        }
-        D(fprintf(stderr, "%*c> assignment_block_nonewline[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr_nonewline"));
-        int _cut_var = 0;
-        Token * _literal;
-        expr_ty a;
-        expr_ty c;
-        if (
-            (a = aug_target_rule(p))  // aug_target
-            &&
-            (_literal = _PyPegen_expect_token(p, 57))  // token='|>='
-            &&
-            (_cut_var = 1)
-            &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (c = block_expr_nonewline_rule(p))  // block_expr_nonewline
-            ))
-        )
-        {
-            D(fprintf(stderr, "%*c+ assignment_block_nonewline[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr_nonewline"));
-            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
-            if (_token == NULL) {
-                p->level--;
-                return NULL;
-            }
-            int _end_lineno = _token->end_lineno;
-            UNUSED(_end_lineno); // Only used by EXTRA macro
-            int _end_col_offset = _token->end_col_offset;
-            UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_AugAssign ( a , Comp , c , EXTRA );
-            if (_res == NULL && PyErr_Occurred()) {
-                p->error_indicator = 1;
-                p->level--;
-                return NULL;
-            }
-            goto done;
-        }
-        p->mark = _mark;
-        D(fprintf(stderr, "%*c%s assignment_block_nonewline[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "aug_target '|>=' ~ block_expr_nonewline"));
-        if (_cut_var) {
-            p->level--;
-            return NULL;
-        }
     }
     { // single_target augassign block_expr_nonewline
         if (p->error_indicator) {
@@ -20781,7 +20481,10 @@ is_composition_rule(Parser *p)
 }
 
 // Left-recursive
-// composition: composition '|>' bitwise_or | bitwise_or
+// composition:
+//     | composition '?'? '|>' bitwise_or
+//     | bitwise_or '?'? '|<' composition
+//     | bitwise_or
 static expr_ty composition_raw(Parser *);
 static expr_ty
 composition_rule(Parser *p)
@@ -20840,27 +20543,27 @@ composition_raw(Parser *p)
     UNUSED(_start_lineno); // Only used by EXTRA macro
     int _start_col_offset = p->tokens[_mark]->col_offset;
     UNUSED(_start_col_offset); // Only used by EXTRA macro
-    { // composition '|>' bitwise_or
+    { // composition '?'? '|>' bitwise_or
         if (p->error_indicator) {
             p->level--;
             return NULL;
         }
-        D(fprintf(stderr, "%*c> composition[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "composition '|>' bitwise_or"));
+        D(fprintf(stderr, "%*c> composition[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "composition '?'? '|>' bitwise_or"));
         Token * _literal;
         expr_ty a;
         expr_ty b;
+        void *n;
         if (
             (a = composition_rule(p))  // composition
             &&
+            (n = _PyPegen_expect_token(p, 58), !p->error_indicator)  // '?'?
+            &&
             (_literal = _PyPegen_expect_token(p, 55))  // token='|>'
             &&
-            _PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (
-                !!
-                (b = bitwise_or_rule(p))  // bitwise_or
-            ))
+            (b = bitwise_or_rule(p))  // bitwise_or
         )
         {
-            D(fprintf(stderr, "%*c+ composition[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "composition '|>' bitwise_or"));
+            D(fprintf(stderr, "%*c+ composition[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "composition '?'? '|>' bitwise_or"));
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
@@ -20870,7 +20573,7 @@ composition_raw(Parser *p)
             UNUSED(_end_lineno); // Only used by EXTRA macro
             int _end_col_offset = _token->end_col_offset;
             UNUSED(_end_col_offset); // Only used by EXTRA macro
-            _res = _PyAST_Composition ( a , b , 0 , EXTRA );
+            _res = _PyAST_Composition ( a , b , 0 , n != NULL , EXTRA );
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
@@ -20880,7 +20583,49 @@ composition_raw(Parser *p)
         }
         p->mark = _mark;
         D(fprintf(stderr, "%*c%s composition[%d-%d L%d]: %s failed!\n", p->level, ' ',
-                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "composition '|>' bitwise_or"));
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "composition '?'? '|>' bitwise_or"));
+    }
+    { // bitwise_or '?'? '|<' composition
+        if (p->error_indicator) {
+            p->level--;
+            return NULL;
+        }
+        D(fprintf(stderr, "%*c> composition[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "bitwise_or '?'? '|<' composition"));
+        Token * _literal;
+        expr_ty a;
+        expr_ty b;
+        void *n;
+        if (
+            (b = bitwise_or_rule(p))  // bitwise_or
+            &&
+            (n = _PyPegen_expect_token(p, 58), !p->error_indicator)  // '?'?
+            &&
+            (_literal = _PyPegen_expect_token(p, 62))  // token='|<'
+            &&
+            (a = composition_rule(p))  // composition
+        )
+        {
+            D(fprintf(stderr, "%*c+ composition[%d-%d L%d]: %s succeeded!\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "bitwise_or '?'? '|<' composition"));
+            Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
+            if (_token == NULL) {
+                p->level--;
+                return NULL;
+            }
+            int _end_lineno = _token->end_lineno;
+            UNUSED(_end_lineno); // Only used by EXTRA macro
+            int _end_col_offset = _token->end_col_offset;
+            UNUSED(_end_col_offset); // Only used by EXTRA macro
+            _res = _PyAST_Composition ( a , b , 0 , n != NULL , EXTRA );
+            if (_res == NULL && PyErr_Occurred()) {
+                p->error_indicator = 1;
+                p->level--;
+                return NULL;
+            }
+            goto done;
+        }
+        p->mark = _mark;
+        D(fprintf(stderr, "%*c%s composition[%d-%d L%d]: %s failed!\n", p->level, ' ',
+                  p->error_indicator ? "ERROR!" : "-", _mark, p->mark, p->tok->lineno, "bitwise_or '?'? '|<' composition"));
     }
     { // bitwise_or
         if (p->error_indicator) {
@@ -27531,15 +27276,10 @@ listcomp_rule(Parser *p)
         return NULL;
     }
     expr_ty _res = NULL;
-    if (!_PyPegen_inc_subn(p)) {
-        p->level--;
-        return NULL;
-    }
     int _mark = p->mark;
     if (p->mark == p->fill && _PyPegen_fill_token(p) < 0) {
         p->error_indicator = 1;
         p->level--;
-        _PyPegen_dec_subn(p, 0);
         return NULL;
     }
     int _start_lineno = p->tokens[_mark]->lineno;
@@ -27549,7 +27289,6 @@ listcomp_rule(Parser *p)
     { // '[' star_named_expression for_if_clauses ']'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> listcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'[' star_named_expression for_if_clauses ']'"));
@@ -27571,7 +27310,6 @@ listcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27582,7 +27320,6 @@ listcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27594,7 +27331,6 @@ listcomp_rule(Parser *p)
     { // '[' for_if_prefix_clauses star_named_expression ']'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> listcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'[' for_if_prefix_clauses star_named_expression ']'"));
@@ -27616,7 +27352,6 @@ listcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27627,7 +27362,6 @@ listcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27639,7 +27373,6 @@ listcomp_rule(Parser *p)
     if (p->call_invalid_rules) { // invalid_comprehension
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> listcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "invalid_comprehension"));
@@ -27659,7 +27392,6 @@ listcomp_rule(Parser *p)
     _res = NULL;
   done:
     p->level--;
-    _PyPegen_dec_subn(p, !p->error_indicator && _res != NULL);
     return _res;
 }
 
@@ -27679,15 +27411,10 @@ tuplecomp_rule(Parser *p)
         return NULL;
     }
     expr_ty _res = NULL;
-    if (!_PyPegen_inc_subn(p)) {
-        p->level--;
-        return NULL;
-    }
     int _mark = p->mark;
     if (p->mark == p->fill && _PyPegen_fill_token(p) < 0) {
         p->error_indicator = 1;
         p->level--;
-        _PyPegen_dec_subn(p, 0);
         return NULL;
     }
     int _start_lineno = p->tokens[_mark]->lineno;
@@ -27697,7 +27424,6 @@ tuplecomp_rule(Parser *p)
     { // '(' (star_assignment_expression | expression !':=') for_if_clauses ',' ')'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> tuplecomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'(' (star_assignment_expression | expression !':=') for_if_clauses ',' ')'"));
@@ -27722,7 +27448,6 @@ tuplecomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27733,7 +27458,6 @@ tuplecomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27745,7 +27469,6 @@ tuplecomp_rule(Parser *p)
     { // '(' for_if_prefix_clauses (star_assignment_expression | expression !':=') ',' ')'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> tuplecomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'(' for_if_prefix_clauses (star_assignment_expression | expression !':=') ',' ')'"));
@@ -27770,7 +27493,6 @@ tuplecomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27781,7 +27503,6 @@ tuplecomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27793,7 +27514,6 @@ tuplecomp_rule(Parser *p)
     if (p->call_invalid_rules) { // invalid_comprehension
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> tuplecomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "invalid_comprehension"));
@@ -27813,7 +27533,6 @@ tuplecomp_rule(Parser *p)
     _res = NULL;
   done:
     p->level--;
-    _PyPegen_dec_subn(p, !p->error_indicator && _res != NULL);
     return _res;
 }
 
@@ -27833,15 +27552,10 @@ setcomp_rule(Parser *p)
         return NULL;
     }
     expr_ty _res = NULL;
-    if (!_PyPegen_inc_subn(p)) {
-        p->level--;
-        return NULL;
-    }
     int _mark = p->mark;
     if (p->mark == p->fill && _PyPegen_fill_token(p) < 0) {
         p->error_indicator = 1;
         p->level--;
-        _PyPegen_dec_subn(p, 0);
         return NULL;
     }
     int _start_lineno = p->tokens[_mark]->lineno;
@@ -27851,7 +27565,6 @@ setcomp_rule(Parser *p)
     { // '{' star_named_noslice_expression for_if_clauses '}'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> setcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'{' star_named_noslice_expression for_if_clauses '}'"));
@@ -27873,7 +27586,6 @@ setcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27884,7 +27596,6 @@ setcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27896,7 +27607,6 @@ setcomp_rule(Parser *p)
     { // '{' for_if_prefix_clauses star_named_noslice_expression '}'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> setcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'{' for_if_prefix_clauses star_named_noslice_expression '}'"));
@@ -27918,7 +27628,6 @@ setcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -27929,7 +27638,6 @@ setcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -27941,7 +27649,6 @@ setcomp_rule(Parser *p)
     if (p->call_invalid_rules) { // invalid_comprehension
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> setcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "invalid_comprehension"));
@@ -27961,7 +27668,6 @@ setcomp_rule(Parser *p)
     _res = NULL;
   done:
     p->level--;
-    _PyPegen_dec_subn(p, !p->error_indicator && _res != NULL);
     return _res;
 }
 
@@ -28116,15 +27822,10 @@ dictcomp_rule(Parser *p)
         return NULL;
     }
     expr_ty _res = NULL;
-    if (!_PyPegen_inc_subn(p)) {
-        p->level--;
-        return NULL;
-    }
     int _mark = p->mark;
     if (p->mark == p->fill && _PyPegen_fill_token(p) < 0) {
         p->error_indicator = 1;
         p->level--;
-        _PyPegen_dec_subn(p, 0);
         return NULL;
     }
     int _start_lineno = p->tokens[_mark]->lineno;
@@ -28134,7 +27835,6 @@ dictcomp_rule(Parser *p)
     { // '{' double_starred_kvpair for_if_clauses '}'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> dictcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'{' double_starred_kvpair for_if_clauses '}'"));
@@ -28156,7 +27856,6 @@ dictcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -28167,7 +27866,6 @@ dictcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -28179,7 +27877,6 @@ dictcomp_rule(Parser *p)
     { // '{' for_if_prefix_clauses double_starred_kvpair '}'
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> dictcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "'{' for_if_prefix_clauses double_starred_kvpair '}'"));
@@ -28201,7 +27898,6 @@ dictcomp_rule(Parser *p)
             Token *_token = _PyPegen_get_last_nonnwhitespace_token(p);
             if (_token == NULL) {
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             int _end_lineno = _token->end_lineno;
@@ -28212,7 +27908,6 @@ dictcomp_rule(Parser *p)
             if (_res == NULL && PyErr_Occurred()) {
                 p->error_indicator = 1;
                 p->level--;
-                _PyPegen_dec_subn(p, 0);
                 return NULL;
             }
             goto done;
@@ -28224,7 +27919,6 @@ dictcomp_rule(Parser *p)
     if (p->call_invalid_rules) { // invalid_dict_comprehension
         if (p->error_indicator) {
             p->level--;
-            _PyPegen_dec_subn(p, 0);
             return NULL;
         }
         D(fprintf(stderr, "%*c> dictcomp[%d-%d L%d]: %s\n", p->level, ' ', _mark, p->mark, p->tok->lineno, "invalid_dict_comprehension"));
@@ -28244,7 +27938,6 @@ dictcomp_rule(Parser *p)
     _res = NULL;
   done:
     p->level--;
-    _PyPegen_dec_subn(p, !p->error_indicator && _res != NULL);
     return _res;
 }
 
@@ -63169,5 +62862,11 @@ _PyPegen_parse(Parser *p)
         result = fstring_rule(p);
     }
 
+    if (result && p->start_rule != Py_fstring_input) {
+        if (!_PyPegen_fix_templates(p, result)) {
+            p->error_indicator = 1;
+            return NULL;
+        }
+    }
     return result;
 }

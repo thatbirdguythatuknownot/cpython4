@@ -233,6 +233,10 @@
 
    Token value for ``"=>"``.
 
+.. data:: PIPELT
+
+   Token value for ``"|<"``.
+
 .. data:: OP
 
 .. data:: TYPE_IGNORE

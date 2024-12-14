@@ -43,6 +43,9 @@ _PyPegen_byte_offset_to_character_offset(PyObject *line, Py_ssize_t col_offset)
 int
 _PyPegen_insert_memo(Parser *p, int mark, int type, void *node)
 {
+    if (node) {
+        return 0;
+    }
     // Insert in front
     Memo *m = _PyArena_Malloc(p->arena, sizeof(Memo));
     if (m == NULL) {
@@ -746,6 +749,584 @@ compute_parser_flags(PyCompilerFlags *flags)
     return parser_flags;
 }
 
+/* See comments in symtable.c. */
+#define COMPILER_STACK_FRAME_SCALE 2
+
+struct template_fixer {
+    int recursion_depth;            /* current recursion depth */
+    int recursion_limit;            /* recursion limit */
+
+    Parser *p;
+
+    expr_ty template_subs[PY_MAX_TEMPLATE_SUBS];
+    int subn;
+};
+
+#define POS(NODE) \
+    (NODE)->lineno, (NODE)->col_offset, (NODE)->end_lineno, (NODE)->end_col_offset
+
+#define CALL(TYPE, ...) \
+    if (!(fix_ ## TYPE)(state, __VA_ARGS__)) { \
+        state->recursion_depth--; \
+        return 0; \
+    }
+
+#define CALL_OPT(TYPE, ARG, ...) \
+    if ((ARG) != NULL && !(fix_ ## TYPE)(state, (ARG), __VA_ARGS__)) { \
+        state->recursion_depth--; \
+        return 0; \
+    }
+
+#define CALL_SEQ(TYPE, ARG, ...) { \
+    int i; \
+    asdl_ ## TYPE ## _seq *seq = (ARG); /* avoid variable capture */ \
+    for (i = 0; i < asdl_seq_LEN(seq); i++) { \
+        TYPE ## _ty elt = (TYPE ## _ty)asdl_seq_GET(seq, i); \
+        if (elt != NULL && !(fix_ ## TYPE)(state, elt, __VA_ARGS__)) { \
+            state->recursion_depth--; \
+            return 0; \
+        } \
+    } \
+}
+
+static int
+fix_inc_subn(struct template_fixer *state,
+             int lineno, int col_offset,
+             int end_lineno, int end_col_offset)
+{
+    if (state->subn >= PY_MAX_TEMPLATE_SUBS) {
+        RAISE_ERROR_KNOWN_LOCATION(state->p, PyExc_SyntaxError,
+                                   lineno, col_offset, end_lineno, end_col_offset,
+                                   "composition/comprehension depth exceeded %d",
+                                   PY_MAX_TEMPLATE_SUBS);
+        return 0;
+    }
+
+    /* Ensure that the data isn't garbage. */
+    state->template_subs[state->subn++] = NULL;
+    return 1;
+}
+
+#define INC_SUBN(NODE) fix_inc_subn(state, POS(NODE))
+
+static int
+fix_dec_subn(struct template_fixer *state, int has_last,
+             int lineno, int col_offset,
+             int end_lineno, int end_col_offset)
+{
+    if (state->subn <= 0) {
+        RAISE_ERROR_KNOWN_LOCATION(state->p, PyExc_SyntaxError,
+                                   lineno, col_offset, end_lineno, end_col_offset,
+                                   "composition/comprehension depth underflow");
+        return 0;
+    }
+
+    state->subn--;
+    if (has_last) {
+        expr_ty sub = state->template_subs[state->subn];
+        if (sub) {
+            assert(sub->kind == Template_kind);
+            sub->v.Template.last = 1;
+        }
+    }
+    return 1;
+}
+
+#define DEC_SUBN(NODE, HASLAST) fix_dec_subn(state, (HASLAST), POS(NODE))
+
+static int fix_expr(struct template_fixer *, expr_ty);
+static int fix_stmt(struct template_fixer *, stmt_ty);
+
+static int
+fix_arg(struct template_fixer *state, arg_ty node_)
+{
+    CALL_OPT(expr, node_->annotation);
+    return 1;
+}
+
+static int
+fix_arguments(struct template_fixer *state, arguments_ty node_)
+{
+    CALL_SEQ(arg, node_->posonlyargs);
+    CALL_SEQ(arg, node_->args);
+    CALL_OPT(arg, node_->vararg);
+    CALL_SEQ(arg, node_->kwonlyargs);
+    CALL_SEQ(expr, node_->kw_defaults);
+    CALL_OPT(arg, node_->kwarg);
+    CALL_SEQ(expr, node_->defaults);
+    return 1;
+}
+
+static int
+fix_comprehension(struct template_fixer *state, comprehension_ty node_)
+{
+    CALL(expr, node_->target);
+    CALL(expr, node_->iter);
+    CALL_SEQ(expr, node_->ifs);
+    return 1;
+}
+
+static int
+fix_keyword(struct template_fixer *state, keyword_ty node_)
+{
+    CALL_OPT(expr, node_->value);
+    return 1;
+}
+
+static int
+fix_expr(struct template_fixer *state, expr_ty node_)
+{
+    if (++state->recursion_depth > state->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+                        "maximum recursion depth exceeded during compilation");
+        return 0;
+    }
+
+    switch (node_->kind) {
+    case BoolOp_kind:
+        CALL_SEQ(expr, node_->v.BoolOp.values);
+        break;
+    case BinOp_kind:
+        CALL(expr, node_->v.BinOp.left);
+        CALL(expr, node_->v.BinOp.right);
+        break;
+    case UnaryOp_kind:
+        CALL(expr, node_->v.UnaryOp.operand);
+        break;
+    case Lambda_kind:
+        CALL(arguments, node_->v.Lambda.args);
+        CALL(expr, node_->v.Lambda.body);
+        break;
+    case IfExp_kind:
+        CALL(expr, node_->v.IfExp.test);
+        CALL(expr, node_->v.IfExp.body);
+        CALL(expr, node_->v.IfExp.orelse);
+        break;
+    case Dict_kind:
+        CALL_SEQ(expr, node_->v.Dict.keys);
+        CALL_SEQ(expr, node_->v.Dict.values);
+        break;
+    case Set_kind:
+        CALL_SEQ(expr, node_->v.Set.elts);
+        break;
+    case ListComp_kind:
+        INC_SUBN(node_);
+        CALL(expr, node_->v.ListComp.elt);
+        CALL_SEQ(comprehension, node_->v.ListComp.generators);
+        DEC_SUBN(node_, 0);
+        break;
+    case TupleComp_kind:
+        INC_SUBN(node_);
+        CALL(expr, node_->v.TupleComp.elt);
+        CALL_SEQ(comprehension, node_->v.TupleComp.generators);
+        DEC_SUBN(node_, 0);
+        break;
+    case SetComp_kind:
+        INC_SUBN(node_);
+        CALL(expr, node_->v.SetComp.elt);
+        CALL_SEQ(comprehension, node_->v.SetComp.generators);
+        DEC_SUBN(node_, 0);
+        break;
+    case DictComp_kind:
+        INC_SUBN(node_);
+        CALL_OPT(expr, node_->v.DictComp.key);
+        CALL(expr, node_->v.DictComp.value);
+        CALL_SEQ(comprehension, node_->v.DictComp.generators);
+        DEC_SUBN(node_, 0);
+        break;
+    case GeneratorExp_kind:
+        CALL(expr, node_->v.GeneratorExp.elt);
+        CALL_SEQ(comprehension, node_->v.GeneratorExp.generators);
+        break;
+    case Await_kind:
+        CALL(expr, node_->v.Await.value);
+        break;
+    case Yield_kind:
+        CALL_OPT(expr, node_->v.Yield.value);
+        break;
+    case YieldFrom_kind:
+        CALL(expr, node_->v.YieldFrom.value);
+        break;
+    case Compare_kind:
+        CALL(expr, node_->v.Compare.left);
+        CALL_SEQ(expr, node_->v.Compare.comparators);
+        break;
+    case Call_kind:
+        CALL(expr, node_->v.Call.func);
+        CALL_SEQ(expr, node_->v.Call.args);
+        CALL_SEQ(keyword, node_->v.Call.keywords);
+        break;
+    case FormattedValue_kind:
+        CALL(expr, node_->v.FormattedValue.value);
+        CALL_OPT(expr, node_->v.FormattedValue.format_spec);
+        break;
+    case JoinedStr_kind:
+        CALL_SEQ(expr, node_->v.JoinedStr.values);
+        break;
+    case Attribute_kind:
+        CALL(expr, node_->v.Attribute.value);
+        break;
+    case Subscript_kind:
+        CALL(expr, node_->v.Subscript.value);
+        CALL(expr, node_->v.Subscript.slice);
+        break;
+    case Starred_kind:
+        CALL(expr, node_->v.Starred.value);
+        break;
+    case Slice_kind:
+        CALL_OPT(expr, node_->v.Slice.lower);
+        CALL_OPT(expr, node_->v.Slice.upper);
+        CALL_OPT(expr, node_->v.Slice.step);
+        break;
+    case List_kind:
+        CALL_SEQ(expr, node_->v.List.elts);
+        break;
+    case Tuple_kind:
+        CALL_SEQ(expr, node_->v.Tuple.elts);
+        break;
+    case NamedExpr_kind:
+        CALL(expr, node_->v.NamedExpr.value);
+        break;
+    case Composition_kind:
+        CALL(expr, node_->v.Composition.arg);
+        INC_SUBN(node_);
+        CALL(expr, node_->v.Composition.func);
+        DEC_SUBN(node_, 1);
+        if (state->template_subs[state->subn]) {
+            node_->v.Composition.has_templates = 1;
+            if (node_->v.Composition.aware) {
+                RAISE_ERROR_KNOWN_LOCATION(
+                    state->p, PyExc_SyntaxError, POS(node_),
+                    "cannot have none-aware templated pipe"
+                );
+                return 0;
+            }
+        }
+        break;
+    case CompoundExpr_kind:
+        CALL(stmt, node_->v.CompoundExpr.value);
+        break;
+    case BlockExpr_kind:
+        CALL_SEQ(stmt, node_->v.BlockExpr.body);
+        break;
+    case ExprTarget_kind:
+        CALL(expr, node_->v.ExprTarget.value);
+        break;
+    case Template_kind:
+        if (node_->v.Template.level >= state->subn) {
+            RAISE_ERROR_KNOWN_LOCATION(state->p, PyExc_SyntaxError, POS(node_),
+                                       "template index out of range");
+            return 0;
+        }
+        state->template_subs[state->subn - node_->v.Template.level - 1] = node_;
+        break;
+    case Name_kind:
+    case Constant_kind:
+        // nothing further to do
+        break;
+    // No default case, so the compiler will emit a warning if new expression
+    // kinds are added without being handled here
+    }
+
+    state->recursion_depth--;
+    return 1;
+}
+
+static int
+fix_type_param(struct template_fixer *state, type_param_ty node_)
+{
+    switch (node_->kind) {
+        case TypeVar_kind:
+            CALL_OPT(expr, node_->v.TypeVar.bound);
+            break;
+        case ParamSpec_kind:
+        case TypeVarTuple_kind:
+            break;
+    }
+    return 1;
+}
+
+static int
+fix_withitem(struct template_fixer *state, withitem_ty node_)
+{
+    CALL(expr, node_->context_expr);
+    CALL_OPT(expr, node_->optional_vars);
+    return 1;
+}
+
+static int
+fix_excepthandler(struct template_fixer *state, excepthandler_ty node_)
+{
+    switch (node_->kind) {
+    case ExceptHandler_kind:
+        CALL_OPT(expr, node_->v.ExceptHandler.type);
+        CALL_SEQ(stmt, node_->v.ExceptHandler.body);
+        break;
+    // No default case, so the compiler will emit a warning if new handler
+    // kinds are added without being handled here
+    }
+    return 1;
+}
+
+static int
+fix_pattern(struct template_fixer *state, pattern_ty node_)
+{
+    // Currently, this is really only used to form complex/negative numeric
+    // constants in MatchValue and MatchMapping nodes
+    // We still recurse into all subexpressions and subpatterns anyway
+    if (++state->recursion_depth > state->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+                        "maximum recursion depth exceeded during compilation");
+        return 0;
+    }
+
+    switch (node_->kind) {
+        case MatchValue_kind:
+            CALL(expr, node_->v.MatchValue.value);
+            break;
+        case MatchSingleton_kind:
+            break;
+        case MatchSequence_kind:
+            CALL_SEQ(pattern, node_->v.MatchSequence.patterns);
+            break;
+        case MatchMapping_kind:
+            CALL_SEQ(expr, node_->v.MatchMapping.keys);
+            CALL_SEQ(pattern, node_->v.MatchMapping.patterns);
+            break;
+        case MatchClass_kind:
+            CALL(expr, node_->v.MatchClass.cls);
+            CALL_SEQ(pattern, node_->v.MatchClass.patterns);
+            CALL_SEQ(pattern, node_->v.MatchClass.kwd_patterns);
+            break;
+        case MatchStar_kind:
+            break;
+        case MatchAs_kind:
+            CALL_OPT(pattern, node_->v.MatchAs.pattern);
+            break;
+        case MatchOr_kind:
+            CALL_SEQ(pattern, node_->v.MatchOr.patterns);
+            break;
+    // No default case, so the compiler will emit a warning if new pattern
+    // kinds are added without being handled here
+    }
+
+    state->recursion_depth--;
+    return 1;
+}
+
+static int
+fix_match_case(struct template_fixer *state, match_case_ty node_)
+{
+    CALL(pattern, node_->pattern);
+    CALL_OPT(expr, node_->guard);
+    CALL_SEQ(stmt, node_->body);
+    return 1;
+}
+
+static int
+fix_stmt(struct template_fixer *state, stmt_ty node_)
+{
+    if (++state->recursion_depth > state->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+                        "maximum recursion depth exceeded during compilation");
+        return 0;
+    }
+
+    switch (node_->kind) {
+    case FunctionDef_kind:
+        CALL_SEQ(type_param, node_->v.FunctionDef.type_params);
+        CALL(arguments, node_->v.FunctionDef.args);
+        CALL_SEQ(stmt, node_->v.FunctionDef.body);
+        CALL_SEQ(expr, node_->v.FunctionDef.decorator_list);
+        CALL_OPT(expr, node_->v.FunctionDef.returns);
+        break;
+    case AsyncFunctionDef_kind:
+        CALL_SEQ(type_param, node_->v.AsyncFunctionDef.type_params);
+        CALL(arguments, node_->v.AsyncFunctionDef.args);
+        CALL_SEQ(stmt, node_->v.AsyncFunctionDef.body);
+        CALL_SEQ(expr, node_->v.AsyncFunctionDef.decorator_list);
+        CALL_OPT(expr, node_->v.AsyncFunctionDef.returns);
+        break;
+    case ClassDef_kind:
+        CALL_SEQ(type_param, node_->v.ClassDef.type_params);
+        CALL_SEQ(expr, node_->v.ClassDef.bases);
+        CALL_SEQ(keyword, node_->v.ClassDef.keywords);
+        CALL_SEQ(stmt, node_->v.ClassDef.body);
+        CALL_SEQ(expr, node_->v.ClassDef.decorator_list);
+        break;
+    case Return_kind:
+        CALL_OPT(expr, node_->v.Return.value);
+        break;
+    case Delete_kind:
+        CALL_SEQ(expr, node_->v.Delete.targets);
+        break;
+    case Assign_kind:
+        CALL_SEQ(expr, node_->v.Assign.targets);
+        CALL(expr, node_->v.Assign.value);
+        break;
+    case AugAssign_kind:
+        CALL(expr, node_->v.AugAssign.target);
+        CALL_OPT(expr, node_->v.AugAssign.value);
+        break;
+    case AnnAssign_kind:
+        CALL(expr, node_->v.AnnAssign.target);
+        CALL(expr, node_->v.AnnAssign.annotation);
+        CALL_OPT(expr, node_->v.AnnAssign.value);
+        break;
+    case TypeAlias_kind:
+        CALL(expr, node_->v.TypeAlias.name);
+        CALL_SEQ(type_param, node_->v.TypeAlias.type_params);
+        CALL(expr, node_->v.TypeAlias.value);
+        break;
+    case For_kind:
+        CALL(expr, node_->v.For.target);
+        CALL(expr, node_->v.For.iter);
+        CALL_SEQ(stmt, node_->v.For.body);
+        CALL_SEQ(stmt, node_->v.For.orelse);
+        break;
+    case AsyncFor_kind:
+        CALL(expr, node_->v.AsyncFor.target);
+        CALL(expr, node_->v.AsyncFor.iter);
+        CALL_SEQ(stmt, node_->v.AsyncFor.body);
+        CALL_SEQ(stmt, node_->v.AsyncFor.orelse);
+        break;
+    case While_kind:
+        CALL(expr, node_->v.While.test);
+        CALL_SEQ(stmt, node_->v.While.body);
+        CALL_SEQ(stmt, node_->v.While.orelse);
+        break;
+    case If_kind:
+        CALL(expr, node_->v.If.test);
+        CALL_SEQ(stmt, node_->v.If.body);
+        CALL_SEQ(stmt, node_->v.If.orelse);
+        break;
+    case With_kind:
+        CALL_SEQ(withitem, node_->v.With.items);
+        CALL_SEQ(stmt, node_->v.With.body);
+        break;
+    case AsyncWith_kind:
+        CALL_SEQ(withitem, node_->v.AsyncWith.items);
+        CALL_SEQ(stmt, node_->v.AsyncWith.body);
+        break;
+    case Raise_kind:
+        CALL_OPT(expr, node_->v.Raise.exc);
+        CALL_OPT(expr, node_->v.Raise.cause);
+        break;
+    case Try_kind:
+        CALL_SEQ(stmt, node_->v.Try.body);
+        CALL_SEQ(excepthandler, node_->v.Try.handlers);
+        CALL_SEQ(stmt, node_->v.Try.orelse);
+        CALL_SEQ(stmt, node_->v.Try.finalbody);
+        break;
+    case TryStar_kind:
+        CALL_SEQ(stmt, node_->v.TryStar.body);
+        CALL_SEQ(excepthandler, node_->v.TryStar.handlers);
+        CALL_SEQ(stmt, node_->v.TryStar.orelse);
+        CALL_SEQ(stmt, node_->v.TryStar.finalbody);
+        break;
+    case Assert_kind:
+        CALL(expr, node_->v.Assert.test);
+        CALL_OPT(expr, node_->v.Assert.msg);
+        break;
+    case Expr_kind:
+        CALL(expr, node_->v.Expr.value);
+        break;
+    case Switch_kind:
+        // TODO: switch case
+        break;
+    case Match_kind:
+        CALL(expr, node_->v.Match.subject);
+        CALL_SEQ(match_case, node_->v.Match.cases);
+        break;
+    // The following statements don't contain any subexpressions to be checked
+    case Import_kind:
+    case ImportFrom_kind:
+    case Global_kind:
+    case Nonlocal_kind:
+    case Goto_kind:
+    case Label_kind:
+    case Pass_kind:
+    case Break_kind:
+    case Continue_kind:
+        break;
+    // No default case, so the compiler will emit a warning if new statement
+    // kinds are added without being handled here
+    }
+
+    state->recursion_depth--;
+    return 1;
+}
+
+static int
+fix_mod(struct template_fixer *state, mod_ty node_)
+{
+    if (++state->recursion_depth > state->recursion_limit) {
+        PyErr_SetString(PyExc_RecursionError,
+                        "maximum recursion depth exceeded during compilation");
+        return 0;
+    }
+
+    switch (node_->kind) {
+    case Module_kind:
+        CALL_SEQ(stmt, node_->v.Module.body);
+        break;
+    case Interactive_kind:
+        CALL_SEQ(stmt, node_->v.Interactive.body);
+        break;
+    case Expression_kind:
+        CALL(expr, node_->v.Expression.body);
+        break;
+    case FunctionType_kind:
+        CALL_SEQ(expr, node_->v.FunctionType.argtypes);
+        CALL(expr, node_->v.FunctionType.returns);
+        break;
+    // No default case so compiler emits warning for unhandled cases
+    }
+
+    state->recursion_depth--;
+    return 1;
+}
+
+#undef POS
+#undef CALL
+#undef CALL_OPT
+#undef CALL_SEQ
+
+int
+_PyPegen_fix_templates(Parser *p, mod_ty mod)
+{
+    struct template_fixer state;
+    PyThreadState *tstate;
+    int starting_recursion_depth;
+
+    /* Setup recursion depth check counters */
+    tstate = _PyThreadState_GET();
+    if (!tstate) {
+        return 0;
+    }
+    /* Be careful here to prevent overflow. */
+    int recursion_depth = C_RECURSION_LIMIT - tstate->c_recursion_remaining;
+    starting_recursion_depth = recursion_depth * COMPILER_STACK_FRAME_SCALE;
+    state.recursion_depth = starting_recursion_depth;
+    state.recursion_limit = C_RECURSION_LIMIT * COMPILER_STACK_FRAME_SCALE;
+    state.p = p;
+    state.subn = 0;
+
+    int res = fix_mod(&state, mod);
+
+    assert(state.subn == 0);
+
+    /* Check that the recursion depth counting balanced correctly */
+    if (res && state.recursion_depth != starting_recursion_depth) {
+        PyErr_Format(PyExc_SystemError,
+            "AST validator recursion depth mismatch (before=%d, after=%d)",
+            starting_recursion_depth, state.recursion_depth);
+        return 0;
+    }
+
+    return res;
+}
+
 // Parser API
 
 Parser *
@@ -798,9 +1379,6 @@ _PyPegen_Parser_New(struct tok_state *tok, int start_rule, int flags,
     p->feature_version = feature_version;
     p->known_err_token = NULL;
     p->level = 0;
-    memset(p->template_subs, 0, PY_MAX_TEMPLATE_SUBS * sizeof(expr_ty));
-    p->subn = 0;
-    p->max_subn = 0;
     p->call_invalid_rules = 0;
     if (restrici == NULL) {
         restrici = PyMem_Calloc(1, sizeof(int));
@@ -892,15 +1470,6 @@ _PyPegen_run_parser(Parser *p)
     if (p->start_rule == Py_single_input && bad_single_statement(p)) {
         p->tok->done = E_BADSINGLE; // This is not necessary for now, but might be in the future
         return RAISE_SYNTAX_ERROR("multiple statements found while compiling a single statement");
-    }
-
-    Py_ssize_t i;
-    for (i = 0; i < p->max_subn; i++) {
-        expr_ty last = p->template_subs[i];
-        if (last) {
-            assert(last->kind == Template_kind);
-            last->v.Template.last = 1;
-        }
     }
 
     // test_peg_generator defines _Py_TEST_PEGEN to not call PyAST_Validate()

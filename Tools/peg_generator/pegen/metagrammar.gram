@@ -63,11 +63,10 @@ rulename[RuleName]:
 
 # In the future this may return something more complicated
 flags[list]:
-    | '(' a=','.flag+ ','? ')' { a }
+    | '(' a=','.flag+ ','? ')' { list(sum(a, ())) }
 
 flag[str]:
-    | "memo" { "memo" }
-    | "$" { "$" }
+    | "memo" { ("memo",) }
 
 alts[Rhs]:
     | alt "|" alts { Rhs([alt] + alts.alts)}
@@ -78,13 +77,10 @@ more_alts[Rhs]:
     | "|" alts NEWLINE { Rhs(alts.alts) }
 
 alt[Alt]:
-    | items '$' action { Alt(items + [NamedItem(None, NameLeaf('ENDMARKER'))], action=action) }
-    | items '$' { Alt(items + [NamedItem(None, NameLeaf('ENDMARKER'))], action=None) }
     | items action { Alt(items, action=action) }
     | items { Alt(items, action=None) }
 
 items[Items]:
-    | '$' '(' items ')' { [TemplateGroup(items)] }
     | named_item items { [named_item] + items }
     | named_item { [named_item] }
 

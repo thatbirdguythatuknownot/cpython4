@@ -23,6 +23,12 @@ _PyPegen_parse(Parser *p)
         result = fstring_rule(p);
     }
 
+    if (result && p->start_rule != Py_fstring_input) {
+        if (!_PyPegen_fix_templates(p, result)) {
+            p->error_indicator = 1;
+            return NULL;
+        }
+    }
     return result;
 }
 '''
@@ -185,10 +191,6 @@ assignment[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=top_rhs !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target '|>=' ~ $( c=top_rhs ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target '|>=' ~ $( c=top_rhs ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=unarassign &(';' | NEWLINE) {
          _PyAST_AugAssign(a, b->kind, NULL, EXTRA) }
     | a=aug_target b=unarassign &(';' | NEWLINE) {
@@ -264,8 +266,8 @@ import_stmt[stmt_ty]:
 # Import statements
 # -----------------
 
-import_name[stmt_ty]: 'import' a=dotted_as_names { _PyAST_Import(a, EXTRA) }
 # note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
+import_name[stmt_ty]: 'import' a=dotted_as_names { _PyAST_Import(a, EXTRA) }
 import_from[stmt_ty]:
     | 'from' a=('.' | '...')* b=dotted_name 'import' c=import_from_targets {
         _PyPegen_check_barry_import(p, _PyAST_ImportFrom(b->v.Name.id, c, _PyPegen_seq_count_dots(a), EXTRA)) }
@@ -308,10 +310,6 @@ assignment_block[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target '|>=' ~ $( c=block_expr ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target '|>=' ~ $( c=block_expr ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
     | a=aug_target b=augassign c=block_expr {
@@ -330,10 +328,6 @@ assignment_block_nonewline[stmt_ty]:
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr_nonewline !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | a=single_target '|>=' ~ $( c=block_expr_nonewline ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
-    | a=aug_target '|>=' ~ $( c=block_expr_nonewline ) {
-         _PyAST_AugAssign(a, Comp, c, EXTRA) }
     | a=single_target b=augassign c=block_expr_nonewline {
          _PyAST_AugAssign(a, b->kind, c, EXTRA) }
     | a=aug_target b=augassign c=block_expr_nonewline {
@@ -1157,8 +1151,10 @@ isnot_composition[CmpopExprPair*]: 'is' 'not' a=composition { _PyPegen_cmpop_exp
 is_composition[CmpopExprPair*]: 'is' a=composition { _PyPegen_cmpop_expr_pair(p, Is, a) }
 
 composition[expr_ty]:
-    | a=composition '|>' $( b=bitwise_or ) {
-        _PyAST_Composition(a, b, 0, EXTRA) }
+    | a=composition n='?'? '|>' b=bitwise_or {
+        _PyAST_Composition(a, b, 0, n != NULL, EXTRA) }
+    | b=bitwise_or n='?'? '|<' a=composition {
+        _PyAST_Composition(a, b, 0, n != NULL, EXTRA) }
     | bitwise_or
 
 # Bitwise operators
@@ -1500,17 +1496,17 @@ if_prefix_clause[expr_ty]:
     | 'if' z=named_expression ':' &('for' | 'if') { z }
     | 'if' z=named_expression &'->' { z }
 
-listcomp[expr_ty] ($):
+listcomp[expr_ty]:
     | '[' a=star_named_expression b=for_if_clauses ']' { _PyAST_ListComp(a, b, EXTRA) }
     | '[' b=for_if_prefix_clauses a=star_named_expression ']' { _PyAST_ListComp(a, b, EXTRA) }
     | invalid_comprehension
 
-tuplecomp[expr_ty] ($):
+tuplecomp[expr_ty]:
     | '(' a=( star_assignment_expression | expression !':=') b=for_if_clauses ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ',' ')' { _PyAST_TupleComp(a, b, EXTRA) }
     | invalid_comprehension
 
-setcomp[expr_ty] ($):
+setcomp[expr_ty]:
     | '{' a=star_named_noslice_expression b=for_if_clauses '}' { _PyAST_SetComp(a, b, EXTRA) }
     | '{' b=for_if_prefix_clauses a=star_named_noslice_expression '}' { _PyAST_SetComp(a, b, EXTRA) }
     | invalid_comprehension
@@ -1520,7 +1516,7 @@ genexp[expr_ty]:
     | '(' b=for_if_prefix_clauses a=( star_assignment_expression | expression !':=') ')' { _PyAST_GeneratorExp(a, b, EXTRA) }
     | invalid_comprehension
 
-dictcomp[expr_ty] ($):
+dictcomp[expr_ty]:
     | '{' a=double_starred_kvpair b=for_if_clauses '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | '{' b=for_if_prefix_clauses a=double_starred_kvpair '}' { _PyAST_DictComp(a->key, a->value, b, EXTRA) }
     | invalid_dict_comprehension

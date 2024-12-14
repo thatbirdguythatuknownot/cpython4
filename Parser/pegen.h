@@ -79,9 +79,6 @@ typedef struct {
     growable_comment_array type_ignore_comments;
     Token *known_err_token;
     int level;
-    expr_ty template_subs[PY_MAX_TEMPLATE_SUBS];
-    int subn;
-    int max_subn;
     int call_invalid_rules;
     int edalloc;
     int *restricted;
@@ -346,8 +343,7 @@ int _PyPegen_check_legacy_stmt(Parser *p, expr_ty t);
 int _PyPegen_add_restricted(Parser *p, Token *t);
 int _PyPegen_check_restricted(Parser *p, int type);
 expr_ty _PyPegen_make_template(Parser *p, int level, Token *t, int, int, int, int, PyArena *);
-int _PyPegen_inc_subn(Parser *p);
-int _PyPegen_dec_subn(Parser *p, int success);
+int _PyPegen_fix_templates(Parser *, mod_ty);
 ResultTokenWithMetadata *_PyPegen_check_fstring_conversion(Parser *p, Token *, expr_ty t);
 ResultTokenWithMetadata *_PyPegen_setup_full_format_spec(Parser *, Token *, asdl_expr_seq *, int, int,
                                                          int, int, PyArena *);

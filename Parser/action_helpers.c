@@ -1755,56 +1755,9 @@ _PyPegen_make_template(Parser *p, int level, Token *t,
                        int lineno, int col_offset, int end_lineno,
                        int end_col_offset, PyArena *arena)
 {
-    if (level >= p->subn) {
-        RAISE_SYNTAX_ERROR_KNOWN_LOCATION(t, "template index out of range");
-        return NULL;
-    }
-
     expr_ty node = _PyAST_Template(level, 0,
                                    lineno, col_offset,
                                    end_lineno, end_col_offset,
                                    p->arena);
-    p->template_subs[p->subn - level - 1] = node;
     return node;
-}
-
-int
-_PyPegen_inc_subn(Parser *p)
-{
-    if (p->subn >= PY_MAX_TEMPLATE_SUBS) {
-        int lineno = p->tok->lineno;
-        int col_offset = CURRENT_POS;
-        RAISE_ERROR_KNOWN_LOCATION(p, PyExc_SyntaxError,
-                                   lineno, col_offset, lineno, col_offset,
-                                   "composition/comprehension depth exceeded %d",
-                                   PY_MAX_TEMPLATE_SUBS);
-        return 0;
-    }
-
-    /* Ensure that the data isn't garbage. */
-    p->template_subs[p->subn++] = NULL;
-    return 1;
-}
-
-int
-_PyPegen_dec_subn(Parser *p, int success)
-{
-    if (p->subn <= 0) {
-        int lineno = p->tok->lineno;
-        int col_offset = CURRENT_POS;
-        RAISE_ERROR_KNOWN_LOCATION(p, PyExc_SyntaxError,
-                                   lineno, col_offset, lineno, col_offset,
-                                   "composition/comprehension depth underflow",
-                                   PY_MAX_TEMPLATE_SUBS);
-        return -1;
-    }
-
-    if (!success) {
-        p->template_subs[--p->subn] = NULL;
-        p->max_subn = p->subn;
-    }
-    else {
-        p->max_subn = p->subn--;
-    }
-    return success;
 }

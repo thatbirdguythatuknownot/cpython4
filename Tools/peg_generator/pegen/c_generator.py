@@ -370,7 +370,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self, exact_tokens, non_exact_tokens
         )
         self._varname_counter = 0
-        self._subn_incs: List[bool] = []
         self._error_return = "NULL"
         self.debug = debug
         self.skip_actions = skip_actions
@@ -397,11 +396,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
         for stmt in self.cleanup_statements:
             self.print(stmt)
         self.remove_level()
-        if self._subn_incs and self._subn_incs[-1]:
-            if ret_val == self._error_return:
-                self.print(f"_PyPegen_dec_subn(p, 0);")
-            else:
-                self.print(f"_PyPegen_dec_subn(p, !p->error_indicator && _res != {self._error_return});");
         self.print(f"return {ret_val};")
 
     def unique_varname(self, name: str = "tmpvar") -> str:
@@ -558,7 +552,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
     def _set_up_rule_memoization(self, node: Rule, result_type: str) -> None:
         self.print("{")
         with self.indent():
-            self._subn_incs.append(False)
             self.add_level()
             self.print(f"{result_type} _res = {self._error_return};")
             self.print(f"if (_PyPegen_is_memoized(p, {node.name}_type, &_res)) {{")
@@ -586,7 +579,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             self.print("}")
             self.print(f"p->mark = _resmark;")
             self.add_return("_res")
-            assert self._subn_incs.pop() is False, "subn mismatch"
         self.print("}")
         self.print(f"static {result_type}")
         self.print(f"{node.name}_raw(Parser *p)")
@@ -606,12 +598,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
                 with self.indent():
                     self.add_return("_res")
                 self.print("}")
-            if template_sub := "$" in node.flags:
-                self.print("if (!_PyPegen_inc_subn(p)) {")
-                with self.indent():
-                    self.add_return(self._error_return)
-                self.print("}")
-            self._subn_incs.append(template_sub)
             self.print("int _mark = p->mark;")
             if any(alt.action and "EXTRA" in alt.action for alt in rhs.alts):
                 self._set_up_token_start_metadata_extraction()
@@ -629,7 +615,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             if memoize:
                 self.print(f"_PyPegen_insert_memo(p, _mark, {node.name}_type, _res);")
             self.add_return("_res")
-        assert self._subn_incs.pop() is template_sub, "subn mismatch"
 
     def _handle_loop_rule_body(self, node: Rule, rhs: Rhs) -> None:
         memoize = self._should_memoize(node)
@@ -644,12 +629,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
                 with self.indent():
                     self.add_return("_res")
                 self.print("}")
-            if template_sub := "$" in node.flags:
-                self.print("if (!_PyPegen_inc_subn(p)) {")
-                with self.indent():
-                    self.add_return(self._error_return)
-                self.print("}")
-            self._subn_incs.append(template_sub)
             self.print("int _mark = p->mark;")
             if memoize:
                 self.print("int _start_mark = p->mark;")
@@ -678,7 +657,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             if memoize and node.name:
                 self.print(f"_PyPegen_insert_memo(p, _start_mark, {node.name}_type, _seq);")
             self.add_return("_seq")
-            assert self._subn_incs.pop() is template_sub, "subn mismatch"
 
     def visit_Rule(self, node: Rule) -> None:
         is_loop = node.is_loop()
@@ -733,23 +711,6 @@ class CParserGenerator(ParserGenerator, GrammarVisitor):
             assert len(node.alts) == 1
         for alt in node.alts:
             self.visit(alt, is_loop=is_loop, is_gather=is_gather, rulename=rulename)
-
-    def visit_TemplateGroup(self, node: TemplateGroup) -> None:
-        self.print(f"_PyPegen_inc_subn(p) && _PyPegen_dec_subn(p, (")
-        with self.indent():
-            if len(node.items) == 1:
-                item = node.items[0]
-                self.print("!!")
-                self.visit(item)
-            else:
-                first = True
-                for item in node.items:
-                    if first:
-                        first = False
-                    else:
-                        self.print("&&")
-                    self.visit(item)
-        self.print("))")
 
     def join_conditions(self, keyword: str, node: Any) -> None:
         self.print(f"{keyword} (")

@@ -13,7 +13,7 @@ struct validator {
     int recursion_depth;            /* current recursion depth */
     int recursion_limit;            /* recursion limit */
 
-    int templatesub_depth;          /* current depth for template substitution */
+    int templatesub_depth;
 };
 
 static int validate_stmts(struct validator *, asdl_stmt_seq *);
@@ -414,7 +414,9 @@ validate_expr(struct validator *state, expr_ty exp, expr_context_ty ctx)
         ret = validate_expr(state, exp->v.ExprTarget.value, Load);
         break;
     case Template_kind:
-        if (exp->v.Template.level >= state->templatesub_depth) {
+        if (exp->v.Template.level < 0 ||
+            exp->v.Template.level >= state->templatesub_depth)
+        {
             PyErr_SetString(PyExc_SyntaxError,
                             "template index out of range");
             return 0;

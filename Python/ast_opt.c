@@ -798,33 +798,39 @@ fold_comp(expr_ty node, PyArena *ctx_, _PyASTOptimizeState *state)
 
     func = node->v.Composition.func;
     CALL(astfold_expr, expr_ty, func);
+    state->comp_ptr.n--;
 
-    if (!entry->last) {
-        if (constant) {
+    if (node->v.Composition.aware) {
+        assert(!node->v.Composition.has_templates);
+        if (func->kind == Constant_kind &&
+            Py_Is(func->v.Constant.value, Py_None))
+        {
+            COPY_NODE(node, func);
+            return 1;
+        }
+    }
+
+    if (constant) {
+        if (!entry->last) {
             asdl_expr_seq *seq =
                 (asdl_expr_seq*)_Py_asdl_generic_seq_new(1, ctx_);
             if (!seq) {
                 return 0;
             }
             asdl_seq_SET(seq, 0, arg);
+            int is_aware = node->v.Composition.aware;
             node->kind = Call_kind;
             node->v.Call.func = func;
             node->v.Call.args = seq;
             node->v.Call.keywords = NULL;
-            node->v.Call.aware = 0;
+            node->v.Call.aware = is_aware;
         }
-    }
-    else {
-        if (constant) {
+        else {
             COPY_NODE(node, func);
             CALL(astfold_expr, expr_ty, node); /* second pass */
         }
-        else {
-            node->v.Composition.has_templates = 1;
-        }
     }
 
-    state->comp_ptr.n--;
     return 1;
 }
 

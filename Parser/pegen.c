@@ -766,13 +766,13 @@ struct template_fixer {
     (NODE)->lineno, (NODE)->col_offset, (NODE)->end_lineno, (NODE)->end_col_offset
 
 #define CALL(TYPE, ...) \
-    if (!(fix_ ## TYPE)(state, __VA_ARGS__)) { \
+    if (!(fix_ ## TYPE)(state, ## __VA_ARGS__)) { \
         state->recursion_depth--; \
         return 0; \
     }
 
 #define CALL_OPT(TYPE, ARG, ...) \
-    if ((ARG) != NULL && !(fix_ ## TYPE)(state, (ARG), __VA_ARGS__)) { \
+    if ((ARG) != NULL && !(fix_ ## TYPE)(state, (ARG), ## __VA_ARGS__)) { \
         state->recursion_depth--; \
         return 0; \
     }
@@ -782,7 +782,7 @@ struct template_fixer {
     asdl_ ## TYPE ## _seq *seq = (ARG); /* avoid variable capture */ \
     for (i = 0; i < asdl_seq_LEN(seq); i++) { \
         TYPE ## _ty elt = (TYPE ## _ty)asdl_seq_GET(seq, i); \
-        if (elt != NULL && !(fix_ ## TYPE)(state, elt, __VA_ARGS__)) { \
+        if (elt != NULL && !(fix_ ## TYPE)(state, elt, ## __VA_ARGS__)) { \
             state->recursion_depth--; \
             return 0; \
         } \

@@ -62,6 +62,7 @@ DOUBLEQMARK             '??'
 DOUBLEQMARKEQUAL        '??='
 EQUALARROW              '=>'
 PIPELT                  '|<'
+LARROW                  '-<'
 
 OP
 TYPE_IGNORE

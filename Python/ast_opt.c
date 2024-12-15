@@ -480,6 +480,12 @@ fold_binop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
     expr_ty lhs, rhs;
     lhs = node->v.BinOp.left;
     rhs = node->v.BinOp.right;
+
+    if (node->v.BinOp.op == LChoose && rhs->kind == Constant_kind) {
+        COPY_NODE(node, lhs);
+        return 1;
+    }
+
     if (lhs->kind != Constant_kind) {
         return 1;
     }
@@ -495,6 +501,11 @@ fold_binop(expr_ty node, PyArena *arena, _PyASTOptimizeState *state)
 
     if (node->v.BinOp.op == Clsc && Py_Is(lv, Py_None))
     {
+        COPY_NODE(node, rhs);
+        return 1;
+    }
+
+    if (node->v.BinOp.op == RChoose) {
         COPY_NODE(node, rhs);
         return 1;
     }

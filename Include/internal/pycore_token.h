@@ -76,17 +76,18 @@ extern "C" {
 #define DOUBLEQMARKEQUAL 60
 #define EQUALARROW      61
 #define PIPELT          62
-#define OP              63
-#define TYPE_IGNORE     64
-#define TYPE_COMMENT    65
-#define SOFT_KEYWORD    66
-#define FSTRING_START   67
-#define FSTRING_MIDDLE  68
-#define FSTRING_END     69
-#define COMMENT         70
-#define NL              71
-#define ERRORTOKEN      72
-#define N_TOKENS        74
+#define LARROW          63
+#define OP              64
+#define TYPE_IGNORE     65
+#define TYPE_COMMENT    66
+#define SOFT_KEYWORD    67
+#define FSTRING_START   68
+#define FSTRING_MIDDLE  69
+#define FSTRING_END     70
+#define COMMENT         71
+#define NL              72
+#define ERRORTOKEN      73
+#define N_TOKENS        75
 #define NT_OFFSET       256
 
 /* Special definitions for cooperation with parser */

@@ -6835,6 +6835,16 @@ compiler_visit_expr1(struct compiler *c, expr_ty e)
             VISIT(c, expr, e->v.BinOp.right);
             USE_LABEL(c, l);
         }
+        else if (e->v.BinOp.op == RChoose) {
+            VISIT(c, expr, e->v.BinOp.left);
+            ADDOP(c, loc, POP_TOP);
+            VISIT(c, expr, e->v.BinOp.right);
+        }
+        else if (e->v.BinOp.op == LChoose) {
+            VISIT(c, expr, e->v.BinOp.left);
+            VISIT(c, expr, e->v.BinOp.right);
+            ADDOP(c, loc, POP_TOP);
+        }
         else {
             VISIT(c, expr, e->v.BinOp.left);
             VISIT(c, expr, e->v.BinOp.right);

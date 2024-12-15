@@ -95,6 +95,8 @@ struct ast_state {
     PyObject *Is_singleton;
     PyObject *Is_type;
     PyObject *JoinedStr_type;
+    PyObject *LChoose_singleton;
+    PyObject *LChoose_type;
     PyObject *LShift_singleton;
     PyObject *LShift_type;
     PyObject *Label_type;
@@ -138,6 +140,8 @@ struct ast_state {
     PyObject *Pass_type;
     PyObject *Pow_singleton;
     PyObject *Pow_type;
+    PyObject *RChoose_singleton;
+    PyObject *RChoose_type;
     PyObject *RShift_singleton;
     PyObject *RShift_type;
     PyObject *Raise_type;

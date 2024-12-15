@@ -107,6 +107,8 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Is_singleton);
     Py_CLEAR(state->Is_type);
     Py_CLEAR(state->JoinedStr_type);
+    Py_CLEAR(state->LChoose_singleton);
+    Py_CLEAR(state->LChoose_type);
     Py_CLEAR(state->LShift_singleton);
     Py_CLEAR(state->LShift_type);
     Py_CLEAR(state->Label_type);
@@ -150,6 +152,8 @@ void _PyAST_Fini(PyInterpreterState *interp)
     Py_CLEAR(state->Pass_type);
     Py_CLEAR(state->Pow_singleton);
     Py_CLEAR(state->Pow_type);
+    Py_CLEAR(state->RChoose_singleton);
+    Py_CLEAR(state->RChoose_type);
     Py_CLEAR(state->RShift_singleton);
     Py_CLEAR(state->RShift_type);
     Py_CLEAR(state->Raise_type);
@@ -1673,7 +1677,7 @@ init_types(struct ast_state *state)
     if (!state->Or_singleton) return 0;
     state->operator_type = make_type(state, "operator", state->AST_type, NULL,
                                      0,
-        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv | Comp | CompCall | Clsc");
+        "operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift | RShift | BitOr | BitXor | BitAnd | FloorDiv | Comp | CompCall | Clsc | LChoose | RChoose");
     if (!state->operator_type) return 0;
     if (!add_attributes(state, state->operator_type, NULL, 0)) return 0;
     state->Add_type = make_type(state, "Add", state->operator_type, NULL, 0,
@@ -1786,6 +1790,22 @@ init_types(struct ast_state *state)
     state->Clsc_singleton = PyType_GenericNew((PyTypeObject *)state->Clsc_type,
                                               NULL, NULL);
     if (!state->Clsc_singleton) return 0;
+    state->LChoose_type = make_type(state, "LChoose", state->operator_type,
+                                    NULL, 0,
+        "LChoose");
+    if (!state->LChoose_type) return 0;
+    state->LChoose_singleton = PyType_GenericNew((PyTypeObject
+                                                 *)state->LChoose_type, NULL,
+                                                 NULL);
+    if (!state->LChoose_singleton) return 0;
+    state->RChoose_type = make_type(state, "RChoose", state->operator_type,
+                                    NULL, 0,
+        "RChoose");
+    if (!state->RChoose_type) return 0;
+    state->RChoose_singleton = PyType_GenericNew((PyTypeObject
+                                                 *)state->RChoose_type, NULL,
+                                                 NULL);
+    if (!state->RChoose_singleton) return 0;
     state->unaryop_type = make_type(state, "unaryop", state->AST_type, NULL, 0,
         "unaryop = Invert | Not | UAdd | USub");
     if (!state->unaryop_type) return 0;
@@ -5488,6 +5508,10 @@ PyObject* ast2obj_operator(struct ast_state *state, operator_ty o)
             return Py_NewRef(state->CompCall_singleton);
         case Clsc:
             return Py_NewRef(state->Clsc_singleton);
+        case LChoose:
+            return Py_NewRef(state->LChoose_singleton);
+        case RChoose:
+            return Py_NewRef(state->RChoose_singleton);
     }
     Py_UNREACHABLE();
 }
@@ -11666,6 +11690,22 @@ obj2ast_operator(struct ast_state *state, PyObject* obj, operator_ty* out,
         *out = Clsc;
         return 0;
     }
+    isinstance = PyObject_IsInstance(obj, state->LChoose_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = LChoose;
+        return 0;
+    }
+    isinstance = PyObject_IsInstance(obj, state->RChoose_type);
+    if (isinstance == -1) {
+        return 1;
+    }
+    if (isinstance) {
+        *out = RChoose;
+        return 0;
+    }
 
     PyErr_Format(PyExc_TypeError, "expected some sort of operator, but got %R", obj);
     return 1;
@@ -14137,6 +14177,12 @@ astmodule_exec(PyObject *m)
         return -1;
     }
     if (PyModule_AddObjectRef(m, "Clsc", state->Clsc_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "LChoose", state->LChoose_type) < 0) {
+        return -1;
+    }
+    if (PyModule_AddObjectRef(m, "RChoose", state->RChoose_type) < 0) {
         return -1;
     }
     if (PyModule_AddObjectRef(m, "unaryop", state->unaryop_type) < 0) {

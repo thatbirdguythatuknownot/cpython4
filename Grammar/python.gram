@@ -270,7 +270,7 @@ import_stmt[stmt_ty]:
 import_name[stmt_ty]: 'import' a=dotted_as_names { _PyAST_Import(a, EXTRA) }
 import_from[stmt_ty]:
     | 'from' a=('.' | '...')* b=dotted_name 'import' c=import_from_targets {
-        _PyPegen_check_barry_import(p, _PyAST_ImportFrom(b->v.Name.id, c, _PyPegen_seq_count_dots(a), EXTRA)) }
+        _PyPegen_check_future_import(p, _PyAST_ImportFrom(b->v.Name.id, c, _PyPegen_seq_count_dots(a), EXTRA)) }
     | 'from' a=('.' | '...')+ 'import' b=import_from_targets {
         _PyAST_ImportFrom(NULL, b, _PyPegen_seq_count_dots(a), EXTRA) }
 import_from_targets[asdl_alias_seq*]:
@@ -574,32 +574,88 @@ while_stmt_nonewline[stmt_ty]:
 
 for_stmt[stmt_ty]:
     | invalid_for_stmt
-    | 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
-        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
-        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
-    | 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
+        _PyAST_For(
+            t, ex,
+            ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                p,
+                _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                b, NULL, EXTRA))) : b,
+            el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] ':' tc=[TYPE_COMMENT] b=block el=[else_block] {
+        CHECK_VERSION(
+            stmt_ty, 5, "Async for loops are",
+            _PyAST_AsyncFor(
+                t, ex,
+                ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                    p,
+                    _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                    b, NULL, EXTRA))) : b,
+                el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
         _PyPegen_check_braces(p) ?
-        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)
+        _PyAST_For(
+            t, ex,
+            ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                p,
+                _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                b, NULL, EXTRA))) : b,
+            el, NEW_TYPE_COMMENT(p, tc), EXTRA)
         : NULL }
-    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block] {
         _PyPegen_check_braces(p) ?
-        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA))
+        CHECK_VERSION(
+            stmt_ty, 5, "Async for loops are",
+            _PyAST_AsyncFor(
+                t, ex,
+                ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                    p,
+                    _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                    b, NULL, EXTRA))) : b,
+                el, NEW_TYPE_COMMENT(p, tc), EXTRA))
         : NULL }
     | invalid_for_target
 
 for_stmt_nonewline[stmt_ty]:
-    | 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
-        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
-    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
-        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
-    | 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
+        _PyAST_For(
+            t, ex,
+            ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                p,
+                _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                b, NULL, EXTRA))) : b,
+            el, NEW_TYPE_COMMENT(p, tc), EXTRA) }
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] ':' tc=[TYPE_COMMENT] b=block_nonewline el=[else_block_nonewline] {
+        CHECK_VERSION(
+            stmt_ty, 5, "Async for loops are",
+            _PyAST_AsyncFor(
+                t, ex,
+                ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                    p,
+                    _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                    b, NULL, EXTRA))) : b,
+                el, NEW_TYPE_COMMENT(p, tc), EXTRA)) }
+    | 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
         _PyPegen_check_braces(p) ?
-        _PyAST_For(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA)
+        _PyAST_For(
+            t, ex,
+            ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                p,
+                _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                b, NULL, EXTRA))) : b,
+            el, NEW_TYPE_COMMENT(p, tc), EXTRA)
         : NULL }
-    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
+    | 'async' 'for' t=star_targets 'in' ~ ex=star_expressions ifs[asdl_expr_seq*]=[('if' z=choose_expr { z })+] '{' tc=[TYPE_COMMENT] b=block_nonewline '}' el=[else_block_nonewline] {
         _PyPegen_check_braces(p) ?
-        CHECK_VERSION(stmt_ty, 5, "Async for loops are", _PyAST_AsyncFor(t, ex, b, el, NEW_TYPE_COMMENT(p, tc), EXTRA))
+        CHECK_VERSION(
+            stmt_ty, 5, "Async for loops are",
+            _PyAST_AsyncFor(
+                t, ex,
+                ifs ? CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(
+                    p,
+                    _PyAST_If(asdl_seq_LEN(ifs) >= 2 ? _PyAST_BoolOp(And, ifs, EXTRA) : asdl_seq_GET(ifs, 0),
+                    b, NULL, EXTRA))) : b,
+                el, NEW_TYPE_COMMENT(p, tc), EXTRA))
         : NULL }
     | invalid_for_target
 
@@ -1034,9 +1090,8 @@ expression[expr_ty] (memo):
     | invalid_expression
     | invalid_legacy_expression
     | lambdef
-    | "block" b=braced_block { _PyAST_BlockExpr(b, EXTRA) }
-    | a=disjunction 'if' b=disjunction 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
-    | disjunction
+    | a=choose_expr 'if' b=choose_expr 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
+    | choose_expr
 
 yield_expr[expr_ty]:
     | 'yield' 'from' a=expression { _PyAST_YieldFrom(a, EXTRA) }
@@ -1091,6 +1146,13 @@ named_expression[expr_ty]:
     | assignment_expression
     | invalid_named_expression
     | expression !':='
+
+choose_expr[expr_ty] (memo):
+    | a=disjunction '->' b=choose_expr {
+        _PyAST_BinOp(a, RChoose, b, EXTRA) }
+    | a=disjunction '-<' b=choose_expr {
+        _PyAST_BinOp(a, LChoose, b, EXTRA) }
+    | disjunction
 
 disjunction[expr_ty] (memo):
     | a=conjunction b=('or' c=conjunction { c })+ { _PyAST_BoolOp(
@@ -1244,6 +1306,7 @@ simple_slice[expr_ty]:
     | a=[expression] ':' b=[expression] c=[':' d=[expression] { d }] { _PyAST_Slice(a, b, c, EXTRA) }
 
 atom[expr_ty]:
+    | "block" b=braced_block { _PyAST_BlockExpr(b, EXTRA) }
     | NAME
     | 'True' { _PyAST_Constant(Py_True, NULL, EXTRA) }
     | 'False' { _PyAST_Constant(Py_False, NULL, EXTRA) }
@@ -1497,11 +1560,11 @@ for_if_clauses[asdl_comprehension_seq*]:
     | a[asdl_comprehension_seq*]=for_if_clause+ { a }
 
 for_if_clause[comprehension_ty]:
-    | 'async' 'for' a=star_targets 'in' ~ b=disjunction c[asdl_expr_seq*]=('if' z=disjunction { z })* {
+    | 'async' 'for' a=star_targets 'in' ~ b=choose_expr c[asdl_expr_seq*]=('if' z=choose_expr { z })* {
         CHECK_VERSION(comprehension_ty, 6, "Async comprehensions are", _PyAST_comprehension(a, b, c, 1, p->arena)) }
-    | 'for' a=star_targets 'in' ~ b=disjunction c[asdl_expr_seq*]=('if' z=disjunction { z })* {
+    | 'for' a=star_targets 'in' ~ b=choose_expr c[asdl_expr_seq*]=('if' z=choose_expr { z })* {
         _PyAST_comprehension(a, b, c, 0, p->arena) }
-    | "where" a=star_targets '=' b=disjunction c[asdl_expr_seq*]=('if' z=disjunction { z })* {
+    | "where" a=star_targets '=' b=choose_expr c[asdl_expr_seq*]=('if' z=choose_expr { z })* {
         _PyAST_comprehension(a, _PyAST_List(CHECK(asdl_expr_seq*, _PyPegen_singleton_seq(p, b)), Load, EXTRA), c, 0, p->arena) }
     | invalid_for_target
 
@@ -1723,8 +1786,8 @@ invalid_kwarg:
 # IMPORTANT: Note that the "_without_invalid" suffix causes the rule to not call invalid rules under it
 expression_without_invalid[expr_ty]:
     | lambdef
-    | a=disjunction 'if' b=disjunction 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
-    | disjunction
+    | a=choose_expr 'if' b=choose_expr 'else' c=expression { _PyAST_IfExp(b, a, c, EXTRA) }
+    | choose_expr
 invalid_legacy_expression:
     | a=NAME !'(' b=star_expressions {
         _PyPegen_check_legacy_stmt(p, a) ? RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b,
@@ -1733,10 +1796,10 @@ invalid_legacy_expression:
 invalid_expression:
     # !(NAME STRING) is not matched so we don't show this error with some invalid string prefixes like: kf"dsfsdf"
     # Soft keywords need to also be ignored because they can be parsed as NAME NAME
-   | !(NAME STRING | SOFT_KEYWORD) a=disjunction b=expression_without_invalid {
+   | !(NAME STRING | SOFT_KEYWORD) a=choose_expr b=expression_without_invalid {
         _PyPegen_check_legacy_stmt(p, a) ? NULL : p->tokens[p->mark-1]->level == 0 ? NULL :
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "invalid syntax. Perhaps you forgot a comma?") }
-   | a=disjunction 'if' b=disjunction !('else'|':') { RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "expected 'else' after 'if' expression") }
+   | a=choose_expr 'if' b=choose_expr !('else'|':') { RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "expected 'else' after 'if' expression") }
    | a='lambda' [lambda_params] b=':' &(FSTRING_MIDDLE | fstring_replacement_field) {
         RAISE_SYNTAX_ERROR_KNOWN_RANGE(a, b, "f-string: lambda expressions are not allowed without parentheses") }
 

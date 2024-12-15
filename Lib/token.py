@@ -66,19 +66,20 @@ DOUBLEQMARK = 59
 DOUBLEQMARKEQUAL = 60
 EQUALARROW = 61
 PIPELT = 62
-OP = 63
-TYPE_IGNORE = 64
-TYPE_COMMENT = 65
-SOFT_KEYWORD = 66
-FSTRING_START = 67
-FSTRING_MIDDLE = 68
-FSTRING_END = 69
-COMMENT = 70
-NL = 71
+LARROW = 63
+OP = 64
+TYPE_IGNORE = 65
+TYPE_COMMENT = 66
+SOFT_KEYWORD = 67
+FSTRING_START = 68
+FSTRING_MIDDLE = 69
+FSTRING_END = 70
+COMMENT = 71
+NL = 72
 # These aren't used by the C tokenizer but are needed for tokenize.py
-ERRORTOKEN = 72
-ENCODING = 73
-N_TOKENS = 74
+ERRORTOKEN = 73
+ENCODING = 74
+N_TOKENS = 75
 # Special definitions for cooperation with parser
 NT_OFFSET = 256
 
@@ -105,6 +106,7 @@ EXACT_TOKEN_TYPES = {
     '+=': PLUSEQUAL,
     ',': COMMA,
     '-': MINUS,
+    '-<': LARROW,
     '-=': MINEQUAL,
     '->': RARROW,
     '.': DOT,

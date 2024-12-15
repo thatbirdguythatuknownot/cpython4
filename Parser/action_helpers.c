@@ -979,7 +979,7 @@ _PyPegen_check_braces(Parser *p) {
 }
 
 stmt_ty
-_PyPegen_check_barry_import(Parser *p, stmt_ty s) {
+_PyPegen_check_future_import(Parser *p, stmt_ty s) {
     assert(s->kind == ImportFrom_kind);
 
     if (s->v.ImportFrom.level > 0) {
@@ -988,7 +988,7 @@ _PyPegen_check_barry_import(Parser *p, stmt_ty s) {
     }
 
     identifier modname = s->v.ImportFrom.module;
-    if (modname &&
+    if (s->v.ImportFrom.level == 0 && modname &&
         PyUnicode_CompareWithASCIIString(modname, "__future__") == 0)
     {
         int i;

@@ -337,7 +337,7 @@ expr_ty _PyPegen_ensure_real(Parser *p, expr_ty);
 int _PyPegen_as_pos_c_int(Parser *p, expr_ty);
 asdl_seq *_PyPegen_join_sequences(Parser *, asdl_seq *, asdl_seq *);
 int _PyPegen_check_braces(Parser *);
-stmt_ty _PyPegen_check_barry_import(Parser *, stmt_ty);
+stmt_ty _PyPegen_check_future_import(Parser *, stmt_ty);
 int _PyPegen_check_barry_as_flufl(Parser *, Token *);
 int _PyPegen_check_legacy_stmt(Parser *p, expr_ty t);
 int _PyPegen_add_restricted(Parser *p, Token *t);

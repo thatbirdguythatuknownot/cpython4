@@ -237,6 +237,10 @@
 
    Token value for ``"|<"``.
 
+.. data:: LARROW
+
+   Token value for ``"-<"``.
+
 .. data:: OP
 
 .. data:: TYPE_IGNORE

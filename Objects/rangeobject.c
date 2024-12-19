@@ -6,6 +6,7 @@
 #include "pycore_modsupport.h"    // _PyArg_NoKwnames()
 #include "pycore_range.h"
 #include "pycore_tuple.h"         // _PyTuple_ITEMS()
+#include "pycore_call.h"
 
 
 /* Support objects whose length is > PY_SSIZE_T_MAX.
@@ -21,6 +22,7 @@ typedef struct {
     PyObject *stop;
     PyObject *step;
     PyObject *length;
+    int is_str;
 } rangeobject;
 
 /* Helper function for validating step.  Always returns a new reference or
@@ -46,12 +48,33 @@ validate_step(PyObject *step)
 static PyObject *
 compute_range_length(PyObject *start, PyObject *stop, PyObject *step);
 
+static inline PyObject *
+convert_str_to_int(PyObject *ob)
+{
+    if (PyUnicode_Check(ob)) {
+        if (PyUnicode_GET_LENGTH(ob) == 1) {
+            Py_XSETREF(ob, PyLong_FromLong((long)PyUnicode_READ_CHAR(ob, 0)));
+        }
+    }
+    return ob;
+}
+
 static rangeobject *
 make_range_object(PyTypeObject *type, PyObject *start,
-                  PyObject *stop, PyObject *step)
+                  PyObject *stop, PyObject *step, int is_str)
 {
     rangeobject *obj = NULL;
     PyObject *length;
+    if (is_str) {
+        start = convert_str_to_int(start);
+        if (!start) {
+            return NULL;
+        }
+        stop = convert_str_to_int(stop);
+        if (!stop) {
+            return NULL;
+        }
+    }
     length = compute_range_length(start, stop, step);
     if (length == NULL) {
         return NULL;
@@ -65,6 +88,7 @@ make_range_object(PyTypeObject *type, PyObject *start,
     obj->stop = stop;
     obj->step = step;
     obj->length = length;
+    obj->is_str = is_str;
     return obj;
 }
 
@@ -74,7 +98,7 @@ make_range_object(PyTypeObject *type, PyObject *start,
    range(0, 5, -1)
 */
 static PyObject *
-range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args)
+range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args, int is_str)
 {
     rangeobject *obj;
     PyObject *start = NULL, *stop = NULL, *step = NULL;
@@ -87,12 +111,24 @@ range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args)
             /* Convert borrowed refs to owned refs */
             start = PyNumber_Index(args[0]);
             if (!start) {
-                return NULL;
+                if (PyUnicode_Check(args[0]) &&
+                        PyErr_ExceptionMatches(PyExc_TypeError)) {
+                    PyErr_Clear();
+                    start = Py_NewRef(args[0]);
+                } else {
+                    return NULL;
+                }
             }
             stop = PyNumber_Index(args[1]);
             if (!stop) {
-                Py_DECREF(start);
-                return NULL;
+                if (PyUnicode_Check(args[1]) &&
+                        PyErr_ExceptionMatches(PyExc_TypeError)) {
+                    PyErr_Clear();
+                    stop = Py_NewRef(args[1]);
+                } else {
+                    Py_DECREF(start);
+                    return NULL;
+                }
             }
             step = validate_step(step);  /* Caution, this can clear exceptions */
             if (!step) {
@@ -104,7 +140,13 @@ range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args)
         case 1:
             stop = PyNumber_Index(args[0]);
             if (!stop) {
-                return NULL;
+                if (PyUnicode_Check(args[0]) &&
+                        PyErr_ExceptionMatches(PyExc_TypeError)) {
+                    PyErr_Clear();
+                    stop = Py_NewRef(args[0]);
+                } else {
+                    return NULL;
+                }
             }
             start = _PyLong_GetZero();
             step = _PyLong_GetOne();
@@ -119,7 +161,7 @@ range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args)
                          num_args);
             return NULL;
     }
-    obj = make_range_object(type, start, stop, step);
+    obj = make_range_object(type, start, stop, step, is_str);
     if (obj != NULL) {
         return (PyObject *) obj;
     }
@@ -134,10 +176,23 @@ range_from_array(PyTypeObject *type, PyObject *const *args, Py_ssize_t num_args)
 static PyObject *
 range_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
-    if (!_PyArg_NoKeywords("range", kw))
-        return NULL;
+    int is_str = 0;
 
-    return range_from_array(type, _PyTuple_ITEMS(args), PyTuple_GET_SIZE(args));
+    if (kw) {
+        PyObject *empty = PyTuple_New(0);
+        if (empty == NULL) {
+            return NULL;
+        }
+        static char *kwlist[] = {"is_str", NULL};
+        int parsed = PyArg_ParseTupleAndKeywords(
+                empty, kw, "|$p:range", kwlist, &is_str);
+        Py_DECREF(empty);
+        if (!parsed) {
+            return NULL;
+        }
+    }
+
+    return range_from_array(type, _PyTuple_ITEMS(args), PyTuple_GET_SIZE(args), is_str);
 }
 
 
@@ -146,10 +201,12 @@ range_vectorcall(PyTypeObject *type, PyObject *const *args,
                  size_t nargsf, PyObject *kwnames)
 {
     Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
-    if (!_PyArg_NoKwnames("range", kwnames)) {
-        return NULL;
+    if (kwnames != NULL && PyTuple_GET_SIZE(kwnames) != 0) {
+        // Fallback to range_new()
+        PyThreadState *tstate = _PyThreadState_GET();
+        return _PyObject_MakeTpCall(tstate, (PyObject *)type, args, nargs, kwnames);
     }
-    return range_from_array(type, args, nargs);
+    return range_from_array(type, args, nargs, 0);
 }
 
 PyDoc_STRVAR(range_doc,
@@ -390,6 +447,14 @@ range_item(rangeobject *r, Py_ssize_t i)
     }
     res = compute_range_item(r, arg);
     Py_DECREF(arg);
+    if (r->is_str && res) {
+        int ordinal = _PyLong_AsInt(res);
+        Py_DECREF(res);
+        if (ordinal < 0 && PyErr_Occurred()) {
+            return NULL;
+        }
+        return PyUnicode_FromOrdinal(ordinal);
+    }
     return res;
 }
 
@@ -418,7 +483,7 @@ compute_slice(rangeobject *r, PyObject *_slice)
     if (substop == NULL) goto fail;
     Py_CLEAR(stop);
 
-    result = make_range_object(Py_TYPE(r), substart, substop, substep);
+    result = make_range_object(Py_TYPE(r), substart, substop, substep, r->is_str);
     if (result != NULL) {
         return (PyObject *) result;
     }
@@ -606,12 +671,23 @@ range_hash(rangeobject *r)
 static PyObject *
 range_count(rangeobject *r, PyObject *ob)
 {
+    int is_str = 0;
+    if (r->is_str) {
+        ob = convert_str_to_int(ob);
+        if (ob == NULL) {
+            return NULL;
+        }
+        is_str = 1;
+    }
     if (PyLong_CheckExact(ob) || PyBool_Check(ob)) {
         int result = range_contains_long(r, ob);
+        if (is_str)
+            Py_DECREF(ob);
         if (result == -1)
             return NULL;
         return PyLong_FromLong(result);
     } else {
+        assert(!is_str);
         Py_ssize_t count;
         count = _PySequence_IterSearch((PyObject*)r, ob, PY_ITERSEARCH_COUNT);
         if (count == -1)
@@ -625,7 +701,16 @@ range_index(rangeobject *r, PyObject *ob)
 {
     int contains;
 
+    int is_str = 0;
+    if (r->is_str) {
+        ob = convert_str_to_int(ob);
+        if (ob == NULL) {
+            return NULL;
+        }
+        is_str = 1;
+    }
     if (!PyLong_CheckExact(ob) && !PyBool_Check(ob)) {
+        assert(!is_str);
         Py_ssize_t index;
         index = _PySequence_IterSearch((PyObject*)r, ob, PY_ITERSEARCH_INDEX);
         if (index == -1)
@@ -639,6 +724,9 @@ range_index(rangeobject *r, PyObject *ob)
 
     if (contains) {
         PyObject *idx = PyNumber_Subtract(ob, r->start);
+        if (is_str) {
+            Py_DECREF(ob);
+        }
         if (idx == NULL) {
             return NULL;
         }
@@ -682,6 +770,47 @@ range_repr(rangeobject *r)
         return NULL;
     }
 
+    if (r->is_str) {
+        PyObject *temp, *start = r->start, *stop = r->stop;
+        int ordinal = _PyLong_AsInt(start);
+        if (ordinal < 0 && PyErr_Occurred()) {
+            PyErr_Clear();
+        } else {
+            temp = PyUnicode_FromOrdinal(ordinal);
+            if (temp == NULL) {
+                PyErr_Clear();
+            } else {
+                start = temp;
+            }
+        }
+
+        ordinal = _PyLong_AsInt(stop);
+        if (ordinal < 0 && PyErr_Occurred()) {
+            PyErr_Clear();
+        } else {
+            temp = PyUnicode_FromOrdinal(ordinal);
+            if (temp == NULL) {
+                PyErr_Clear();
+            } else {
+                stop = temp;
+            }
+        }
+
+        PyObject *result = NULL;
+        if (istep == 1) {
+            result = PyUnicode_FromFormat("range(%R, %R, is_str=True)",
+                                          start, stop);
+        } else {
+            result = PyUnicode_FromFormat("range(%R, %R, %R, is_str=True)",
+                                          start, stop, r->step);
+        }
+        if (start != r->start)
+            Py_DECREF(start);
+        if (stop != r->stop)
+            Py_DECREF(stop);
+        return result;
+    }
+
     if (istep == 1)
         return PyUnicode_FromFormat("range(%R, %R)", r->start, r->stop);
     else
@@ -693,8 +822,8 @@ range_repr(rangeobject *r)
 static PyObject *
 range_reduce(rangeobject *r, PyObject *args)
 {
-    return Py_BuildValue("(O(OOO))", Py_TYPE(r),
-                         r->start, r->stop, r->step);
+    return Py_BuildValue("(O(OOOi))", Py_TYPE(r),
+                         r->start, r->stop, r->step, r->is_str);
 }
 
 static PyObject *
@@ -707,6 +836,14 @@ range_subscript(rangeobject* self, PyObject* item)
             return NULL;
         result = compute_range_item(self, i);
         Py_DECREF(i);
+        if (self->is_str && result) {
+            int ordinal = _PyLong_AsInt(result);
+            Py_DECREF(result);
+            if (ordinal < 0 && PyErr_Occurred()) {
+                return NULL;
+            }
+            return PyUnicode_FromOrdinal(ordinal);
+        }
         return result;
     }
     if (PySlice_Check(item)) {
@@ -819,7 +956,16 @@ rangeiter_next(_PyRangeIterObject *r)
         long result = r->start;
         r->start = result + r->step;
         r->len--;
-        return PyLong_FromLong(result);
+        if (r->is_str) {
+            if (-(long)INT_MAX <= result <= (long)INT_MAX) {
+                return PyUnicode_FromOrdinal((int)result);
+            }
+            PyErr_SetString(PyExc_OverflowError,
+                            "cannot convert char range item to C int");
+            return NULL;
+        } else {
+            return PyLong_FromLong(result);
+        }
     }
     return NULL;
 }
@@ -850,7 +996,7 @@ rangeiter_reduce(_PyRangeIterObject *r, PyObject *Py_UNUSED(ignored))
     if (step == NULL)
         goto err;
     range = (PyObject*)make_range_object(&PyRange_Type,
-                               start, stop, step);
+                               start, stop, step, r->is_str);
     if (range == NULL)
         goto err;
     /* return the result */
@@ -957,7 +1103,7 @@ get_len_of_range(long lo, long hi, long step)
    is not representable as a C long, OverflowError is raised. */
 
 static PyObject *
-fast_range_iter(long start, long stop, long step, long len)
+fast_range_iter(long start, long stop, long step, long len, int is_str)
 {
     _PyRangeIterObject *it = PyObject_New(_PyRangeIterObject, &PyRangeIter_Type);
     if (it == NULL)
@@ -965,6 +1111,7 @@ fast_range_iter(long start, long stop, long step, long len)
     it->start = start;
     it->step = step;
     it->len = len;
+    it->is_str = is_str;
     return (PyObject *)it;
 }
 
@@ -973,6 +1120,7 @@ typedef struct {
     PyObject *start;
     PyObject *step;
     PyObject *len;
+    int is_str;
 } longrangeiterobject;
 
 static PyObject *
@@ -997,7 +1145,7 @@ longrangeiter_reduce(longrangeiterobject *r, PyObject *Py_UNUSED(ignored))
     if (stop ==  NULL)
         return NULL;
     range =  (PyObject*)make_range_object(&PyRange_Type,
-                               Py_NewRef(r->start), stop, Py_NewRef(r->step));
+                               Py_NewRef(r->start), stop, Py_NewRef(r->step), r->is_str);
     if (range == NULL) {
         Py_DECREF(r->start);
         Py_DECREF(stop);
@@ -1086,6 +1234,13 @@ longrangeiter_next(longrangeiterobject *r)
     PyObject *result = r->start;
     r->start = new_start;
     Py_SETREF(r->len, new_len);
+    if (r->is_str) {
+        int ordinal = _PyLong_AsInt(result);
+        if (ordinal < 0 && PyErr_Occurred()) {
+            return NULL;
+        }
+        return PyUnicode_FromOrdinal(ordinal);
+    }
     return result;
 }
 
@@ -1164,7 +1319,7 @@ range_iter(PyObject *seq)
                 goto long_range;
         }
     }
-    return fast_range_iter(lstart, lstop, lstep, (long)ulen);
+    return fast_range_iter(lstart, lstop, lstep, (long)ulen, r->is_str);
 
   long_range:
     it = PyObject_New(longrangeiterobject, &PyLongRangeIter_Type);
@@ -1174,6 +1329,7 @@ range_iter(PyObject *seq)
     it->start = Py_NewRef(r->start);
     it->step = Py_NewRef(r->step);
     it->len = Py_NewRef(r->length);
+    it->is_str = r->is_str;
     return (PyObject *)it;
 }
 
@@ -1245,7 +1401,7 @@ range_reverse(PyObject *seq, PyObject *Py_UNUSED(ignored))
 
     new_stop = lstart - lstep;
     new_start = (long)(new_stop + ulen * lstep);
-    return fast_range_iter(new_start, new_stop, -lstep, (long)ulen);
+    return fast_range_iter(new_start, new_stop, -lstep, (long)ulen, range->is_str);
 
 long_range:
     it = PyObject_New(longrangeiterobject, &PyLongRangeIter_Type);
@@ -1274,6 +1430,8 @@ long_range:
     it->step = PyNumber_Negative(range->step);
     if (!it->step)
         goto create_failure;
+
+    it->is_str = range->is_str;
 
     return (PyObject *)it;
 

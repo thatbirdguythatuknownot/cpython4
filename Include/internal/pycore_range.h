@@ -13,6 +13,7 @@ typedef struct {
     long start;
     long step;
     long len;
+    int is_str;
 } _PyRangeIterObject;
 
 #ifdef __cplusplus

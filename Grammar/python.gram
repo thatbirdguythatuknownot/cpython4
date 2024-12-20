@@ -189,6 +189,8 @@ assignment[stmt_ty]:
     | a=('(' b=single_target ')' { b }
          | single_subscript_attribute_target) ':' b=expression c=['=' d=top_rhs { d }] {
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
+    | a=julia_fdecl b=['=' c=top_rhs { c }] {
+        (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))), a)  }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=top_rhs !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target b=unarassign &(';' | NEWLINE) {
@@ -308,6 +310,8 @@ assignment_block[stmt_ty]:
     | a=('(' b=single_target ')' { b }
          | single_subscript_attribute_target) ':' b=expression c=['=' d=block_expr { d }] {
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
+    | a=julia_fdecl b=['=' c=block_expr { c }] {
+        (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))), a)  }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target b=augassign c=block_expr {
@@ -326,6 +330,8 @@ assignment_block_nonewline[stmt_ty]:
     | a=('(' b=single_target ')' { b }
          | single_subscript_attribute_target) ':' b=expression c=['=' d=block_expr_nonewline { d }] {
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
+    | a=julia_fdecl b=['=' c=block_expr_nonewline { c }] {
+        (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))), a)  }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr_nonewline !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
     | a=single_target b=augassign c=block_expr_nonewline {
@@ -458,6 +464,12 @@ function_def_raw_nonewline[stmt_ty]:
                             (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
                             b, NULL, a, NEW_TYPE_COMMENT(p, tc), t, EXTRA)
         ) }
+
+julia_fdecl[stmt_ty]:
+    | n=NAME t=[type_params] '(' params=[params] ')' a=['->' z=expression { z }] &('=' | ':=') {
+        _PyAST_FunctionDef(((expr_ty)n)->v.Name.id,
+                           (params) ? params : CHECK(arguments_ty, _PyPegen_empty_arguments(p)),
+                           NULL, NULL, a, NULL, t, EXTRA) }
 
 # Function parameters
 # -------------------
@@ -1341,6 +1353,9 @@ lambdef[expr_ty]:
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
     | a=single_params? '=>' b=expression {
         _PyAST_Lambda((a) ? a : CHECK(arguments_ty, _PyPegen_empty_arguments(p)), b, EXTRA) }
+    | a=julia_fdecl ':=' ~ b=expression {
+        (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))),
+         _PyAST_CompoundExpr(a, EXTRA))  }
     | lambdef_braced
 
 lambdef_braced[expr_ty]:
@@ -1372,6 +1387,8 @@ lambdef_braced[expr_ty]:
             b, NULL, NULL, NULL, NULL,
             EXTRA
         ), EXTRA) }
+    | a=julia_fdecl ':=' ~ b=braced_block {
+        (a->v.FunctionDef.body = b, _PyAST_CompoundExpr(a, EXTRA))  }
 
 lambda_params[arguments_ty]:
     | invalid_lambda_parameters

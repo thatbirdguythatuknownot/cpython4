@@ -957,7 +957,7 @@ rangeiter_next(_PyRangeIterObject *r)
         r->start = result + r->step;
         r->len--;
         if (r->is_str) {
-            if (-(long)INT_MAX <= result <= (long)INT_MAX) {
+            if ((long)INT_MIN <= result && result <= (long)INT_MAX) {
                 return PyUnicode_FromOrdinal((int)result);
             }
             PyErr_SetString(PyExc_OverflowError,

@@ -49,7 +49,7 @@ make_const(expr_ty node, PyObject *val, PyArena *arena)
     return 1;
 }
 
-#define COPY_NODE(TO, FROM) (memcpy((TO), (FROM), sizeof(struct _expr)))
+#define COPY_NODE(TO, FROM) (memcpy((TO), (FROM), sizeof(*(TO))))
 
 static int
 has_starred(asdl_expr_seq *elts)
@@ -1239,9 +1239,14 @@ astfold_stmt(stmt_ty node_, PyArena *ctx_, _PyASTOptimizeState *state)
         CALL(astfold_expr, expr_ty, node_->v.Assert.test);
         CALL_OPT(astfold_expr, expr_ty, node_->v.Assert.msg);
         break;
-    case Expr_kind:
-        CALL(astfold_expr, expr_ty, node_->v.Expr.value);
+    case Expr_kind: {
+        expr_ty val = node_->v.Expr.value;
+        CALL(astfold_expr, expr_ty, val);
+        if (val->kind == CompoundExpr_kind) {
+            COPY_NODE(node_, val->v.CompoundExpr.value);
+        }
         break;
+    }
     case Switch_kind:
         CALL(astfold_expr, expr_ty, node_->v.Switch.subject);
         CALL_SEQ(astfold_switch_case, switch_case, node_->v.Switch.cases);

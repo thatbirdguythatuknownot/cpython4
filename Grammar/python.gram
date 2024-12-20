@@ -189,7 +189,7 @@ assignment[stmt_ty]:
     | a=('(' b=single_target ')' { b }
          | single_subscript_attribute_target) ':' b=expression c=['=' d=top_rhs { d }] {
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
-    | a=julia_fdecl b=['=' c=top_rhs { c }] {
+    | a=julia_fdecl '=' b=top_rhs {
         (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))), a)  }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=top_rhs !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
@@ -310,7 +310,7 @@ assignment_block[stmt_ty]:
     | a=('(' b=single_target ')' { b }
          | single_subscript_attribute_target) ':' b=expression c=['=' d=block_expr { d }] {
         CHECK_VERSION(stmt_ty, 6, "Variable annotations syntax is", _PyAST_AnnAssign(a, b, c, 0, EXTRA)) }
-    | a=julia_fdecl b=['=' c=block_expr { c }] {
+    | a=julia_fdecl '=' b=block_expr {
         (a->v.FunctionDef.body = CHECK(asdl_stmt_seq*, _PyPegen_singleton_seq(p, _PyAST_Return(b, EXTRA))), a)  }
     | a[asdl_expr_seq*]=(z=star_targets '=' { z })+ b=block_expr !'=' tc=[TYPE_COMMENT] {
          _PyAST_Assign(a, b, NEW_TYPE_COMMENT(p, tc), EXTRA) }
